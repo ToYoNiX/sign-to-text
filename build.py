@@ -51,6 +51,7 @@ def build():
     shutil.copy(CSS,      SITE / "style.css")
     shutil.copy(MODEL,    SITE / "model.onnx")
     shutil.copy(LABELMAP, SITE / "label_map.json")
+    (SITE / ".nojekyll").touch()   # tell GitHub Pages to skip Jekyll processing
 
     print(f"Built → {SITE}/")
     for f in sorted(SITE.iterdir()):
