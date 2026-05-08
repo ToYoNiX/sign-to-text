@@ -68,14 +68,34 @@ def add_noise(x: np.ndarray, scale: float = 0.012) -> np.ndarray:
     return _flatten(lm)
 
 
-def rotate_2d(x: np.ndarray) -> np.ndarray:
+def rotate_3d(x: np.ndarray) -> np.ndarray:
     lm = _reshape(x.copy())
-    angle = np.radians(np.random.uniform(-15, 15))
-    cos, sin = np.cos(angle), np.sin(angle)
-    x_rot = lm[:, :, 0] * cos - lm[:, :, 1] * sin
-    y_rot = lm[:, :, 0] * sin + lm[:, :, 1] * cos
-    lm[:, :, 0] = x_rot
-    lm[:, :, 1] = y_rot
+    ax = np.radians(np.random.uniform(-20, 20))   # tilt toward/away camera
+    ay = np.radians(np.random.uniform(-20, 20))   # turn left/right
+    az = np.radians(np.random.uniform(-15, 15))   # in-plane twist
+    # X rotation
+    cy, sy = np.cos(ax), np.sin(ax)
+    y_new = lm[:, :, 1] * cy - lm[:, :, 2] * sy
+    z_new = lm[:, :, 1] * sy + lm[:, :, 2] * cy
+    lm[:, :, 1], lm[:, :, 2] = y_new, z_new
+    # Y rotation
+    cy, sy = np.cos(ay), np.sin(ay)
+    x_new =  lm[:, :, 0] * cy + lm[:, :, 2] * sy
+    z_new = -lm[:, :, 0] * sy + lm[:, :, 2] * cy
+    lm[:, :, 0], lm[:, :, 2] = x_new, z_new
+    # Z rotation
+    cz, sz = np.cos(az), np.sin(az)
+    x_new = lm[:, :, 0] * cz - lm[:, :, 1] * sz
+    y_new = lm[:, :, 0] * sz + lm[:, :, 1] * cz
+    lm[:, :, 0], lm[:, :, 1] = x_new, y_new
+    return _flatten(lm)
+
+
+def flip_depth(x: np.ndarray) -> np.ndarray:
+    """180° Y-axis rotation — simulates dorsal (back-of-hand) view."""
+    lm = _reshape(x.copy())
+    lm[:, :, 0] *= -1   # negate x
+    lm[:, :, 2] *= -1   # negate z
     return _flatten(lm)
 
 
@@ -94,7 +114,9 @@ def augment_sample(x: np.ndarray, n: int = 15) -> list[np.ndarray]:
         if np.random.rand() > 0.4:
             aug = add_noise(aug)
         if np.random.rand() > 0.5:
-            aug = rotate_2d(aug)
+            aug = rotate_3d(aug)
+        if np.random.rand() > 0.6:
+            aug = flip_depth(aug)
         aug = scale_aug(aug)  # always
         copies.append(aug)
     return copies
