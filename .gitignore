@@ -1,3 +1,7 @@
+# ── Build output ───────────────────────────────────────────────────────────────
+# Assembled by build.py for GitHub Pages deployment
+_site/
+
 # ── Generated dataset ──────────────────────────────────────────────────────────
 # Rebuild with: python build_dataset.py
 dataset/

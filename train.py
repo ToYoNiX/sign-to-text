@@ -91,18 +91,40 @@ def rotate_3d(x: np.ndarray) -> np.ndarray:
     return _flatten(lm)
 
 
-def flip_depth(x: np.ndarray) -> np.ndarray:
-    """180° Y-axis rotation — simulates dorsal (back-of-hand) view."""
+# Landmarks occluded when viewing from dorsal side (fingertips + DIP/IP joints)
+_DORSAL_OCCLUDED = [3, 4, 7, 8, 11, 12, 15, 16, 19, 20]
+
+def flip_depth(x: np.ndarray, occlusion_noise: float = 0.04) -> np.ndarray:
+    """180° Y-axis rotation — simulates dorsal (back-of-hand) view.
+    Adds extra noise to landmarks occluded from the dorsal side to match
+    MediaPipe's estimation uncertainty for hidden points."""
     lm = _reshape(x.copy())
-    lm[:, :, 0] *= -1   # negate x
-    lm[:, :, 2] *= -1   # negate z
+    lm[:, :, 0] *= -1
+    lm[:, :, 2] *= -1
+    lm[:, _DORSAL_OCCLUDED, :] += np.random.normal(
+        0, occlusion_noise, lm[:, _DORSAL_OCCLUDED, :].shape
+    )
     return _flatten(lm)
 
 
+# Finger chains: (root_landmark_index, [downstream_joint_indices])
+_FINGER_CHAINS = [
+    (0,  [1, 2, 3, 4]),    # thumb:  wrist → CMC → MCP → IP → Tip
+    (5,  [6, 7, 8]),        # index:  MCP → PIP → DIP → Tip
+    (9,  [10, 11, 12]),     # middle: MCP → PIP → DIP → Tip
+    (13, [14, 15, 16]),     # ring:   MCP → PIP → DIP → Tip
+    (17, [18, 19, 20]),     # pinky:  MCP → PIP → DIP → Tip
+]
+
 def scale_aug(x: np.ndarray) -> np.ndarray:
     lm = _reshape(x.copy())
-    factor = np.random.uniform(0.85, 1.15)
-    lm *= factor
+    # Mild global scale (hand distance from camera residual)
+    lm *= np.random.uniform(0.92, 1.08)
+    # Per-finger length variation — simulates proportion differences between people
+    for root, joints in _FINGER_CHAINS:
+        factor = np.random.uniform(0.82, 1.18)
+        for j in joints:
+            lm[:, j, :] = lm[:, root, :] + (lm[:, j, :] - lm[:, root, :]) * factor
     return _flatten(lm)
 
 

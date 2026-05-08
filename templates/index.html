@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ARSL Live Recognition</title>
+<link rel="stylesheet" href="style.css" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%236366f1'/><text x='16' y='22' text-anchor='middle' font-size='16' fill='white' font-family='system-ui'>AR</text></svg>" />
+</head>
+<body>
+
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loading-text">Loading…</div>
+  <div class="loading-sub">MediaPipe hand landmark detector initialising</div>
+</div>
+
+<div class="top-bar">
+  <h1>ARSL Live Recognition</h1>
+  <div class="badge" id="badge"></div>
+</div>
+
+<div class="pill" id="status-pill" style="background:var(--amber)">
+  <span class="dot"></span>
+  <span id="status-text">Loading…</span>
+</div>
+
+<div class="error-box" id="error-box"></div>
+
+<div class="video-wrap">
+  <video id="video" playsinline muted></video>
+  <canvas id="canvas"></canvas>
+  <div class="fps-badge" id="fps-badge">— fps</div>
+</div>
+
+<!-- site mode: single SVM card (ONNX inference) -->
+<div id="m-site" style="display:none">
+  <div class="result-card" id="result-card">
+    <div class="card-header">
+      <span style="color:var(--indigo)">SVM Prediction</span>
+      <span class="conf-pill" id="site-conf-pill" style="background:var(--border);color:var(--muted)">—</span>
+    </div>
+    <div class="card-body">
+      <div class="hero-row">
+        <div class="hero-sign idle" id="site-sign">—</div>
+        <div class="hero-right">
+          <div class="hero-conf-label">Confidence</div>
+          <div class="hero-conf-track">
+            <div class="hero-conf-fill" id="site-fill" style="width:0%;background:var(--indigo)"></div>
+          </div>
+          <div class="hero-conf-label" id="site-pct" style="color:var(--muted)">—</div>
+        </div>
+      </div>
+      <div class="top3" id="site-top3"></div>
+    </div>
+  </div>
+</div>
+
+<!-- serve mode: SVM + RF cards with consensus -->
+<div id="m-serve" style="display:none">
+  <div class="cards">
+    <div class="model-card" id="card-svm">
+      <div class="card-header">
+        <span style="color:var(--indigo)">SVM</span>
+        <span class="conf-pill" id="svm-conf-pill" style="background:var(--border);color:var(--muted)">—</span>
+      </div>
+      <div class="card-body">
+        <div class="hero-sign idle" id="svm-sign">—</div>
+        <div style="width:100%">
+          <div class="hero-conf-track">
+            <div class="hero-conf-fill" id="svm-fill" style="width:0%;background:var(--indigo)"></div>
+          </div>
+        </div>
+        <div class="top3" id="svm-top3"></div>
+      </div>
+    </div>
+
+    <div class="model-card" id="card-rf">
+      <div class="card-header">
+        <span style="color:var(--green)">Random Forest</span>
+        <span class="conf-pill" id="rf-conf-pill" style="background:var(--border);color:var(--muted)">—</span>
+      </div>
+      <div class="card-body">
+        <div class="hero-sign idle" id="rf-sign">—</div>
+        <div style="width:100%">
+          <div class="hero-conf-track">
+            <div class="hero-conf-fill" id="rf-fill" style="width:0%;background:var(--green)"></div>
+          </div>
+        </div>
+        <div class="top3" id="rf-top3"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="consensus" id="consensus">
+    <span class="consensus-label">CONSENSUS</span>
+    <span class="consensus-sign idle" id="consensus-sign">—</span>
+    <span class="consensus-text" id="consensus-text">waiting for hand…</span>
+  </div>
+</div>
+
+<!-- onnxruntime-web: loaded as a global, only used in site mode -->
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
+<script>const CONFIG = %%CONFIG%%;</script>
+
+<script type="module">
+import { HandLandmarker, FilesetResolver }
+  from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/+esm";
+
+// ── Setup ─────────────────────────────────────────────────────────────────────
+const isSite = CONFIG.mode === "site";
+
+document.getElementById("m-" + CONFIG.mode).style.display = "";
+document.getElementById("badge").textContent = isSite
+  ? "SVM · fully offline"
+  : "SVM + Random Forest · local";
+
+const overlay    = document.getElementById("loading-overlay");
+const loadText   = document.getElementById("loading-text");
+const errorBox   = document.getElementById("error-box");
+const video      = document.getElementById("video");
+const canvas     = document.getElementById("canvas");
+const ctx        = canvas.getContext("2d");
+const statusPill = document.getElementById("status-pill");
+const statusText = document.getElementById("status-text");
+const fpsBadge   = document.getElementById("fps-badge");
+
+const CONNECTIONS = [
+  [0,1],[1,2],[2,3],[3,4],
+  [0,5],[5,6],[6,7],[7,8],
+  [0,9],[9,10],[10,11],[11,12],
+  [0,13],[13,14],[14,15],[15,16],
+  [0,17],[17,18],[18,19],[19,20],
+  [5,9],[9,13],[13,17],
+];
+
+let landmarker      = null;
+let lastVideoTime   = -1;
+let lastInferenceTs = 0;
+let inferInFlight   = false;
+let fpsFrames = 0, fpsLastTs = performance.now();
+const INFER_INTERVAL = isSite ? 80 : 150;
+
+// ── Shared helpers ────────────────────────────────────────────────────────────
+function normalizeHand(lm) {
+  const { x: wx, y: wy, z: wz } = lm[0];
+  const dx = lm[9].x - wx, dy = lm[9].y - wy, dz = lm[9].z - wz;
+  const scale = Math.sqrt(dx*dx + dy*dy + dz*dz) || 1;
+  return lm.map(({ x, y, z }) => ({
+    x: +((x - wx) / scale).toFixed(4),
+    y: +((y - wy) / scale).toFixed(4),
+    z: +((z - wz) / scale).toFixed(4),
+  }));
+}
+
+function drawHand(results) {
+  canvas.width  = video.videoWidth;
+  canvas.height = video.videoHeight;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (!results.landmarks?.length) return;
+  for (const lm of results.landmarks) {
+    ctx.strokeStyle = "rgba(99,102,241,0.85)";
+    ctx.lineWidth = 2.5;
+    for (const [a, b] of CONNECTIONS) {
+      ctx.beginPath();
+      ctx.moveTo(lm[a].x * canvas.width, lm[a].y * canvas.height);
+      ctx.lineTo(lm[b].x * canvas.width, lm[b].y * canvas.height);
+      ctx.stroke();
+    }
+    for (let i = 0; i < lm.length; i++) {
+      ctx.beginPath();
+      ctx.arc(lm[i].x * canvas.width, lm[i].y * canvas.height, i === 0 ? 7 : 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = i === 0 ? "#f59e0b" : "#22c55e";
+      ctx.fill();
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+  }
+}
+
+function setStatus(state) {
+  const colors = { loading: "#f59e0b", detecting: "#22c55e", no_hand: "#ef4444" };
+  const labels = { loading: "Loading…", detecting: "Detecting", no_hand: "No hand detected" };
+  statusPill.style.background = colors[state];
+  statusText.textContent = labels[state];
+}
+
+function confColor(c) {
+  if (c >= 0.80) return "#22c55e";
+  if (c >= 0.50) return "#f59e0b";
+  return "#ef4444";
+}
+
+function renderTop3(container, items, accent) {
+  container.innerHTML = "";
+  const maxP = items[0][1];
+  items.forEach(([sign, p], rank) => {
+    const row = document.createElement("div");
+    row.className = "top3-row";
+    row.innerHTML = `
+      <span class="top3-rank">#${rank + 1}</span>
+      <span class="top3-sign" style="color:${accent}">${sign}</span>
+      <div class="top3-track">
+        <div class="top3-fill" style="width:${maxP > 0 ? (p/maxP)*100 : 0}%;background:${accent}88"></div>
+      </div>
+      <span class="top3-pct">${(p * 100).toFixed(1)}%</span>`;
+    container.appendChild(row);
+  });
+}
+
+// ── Site mode (ONNX) ──────────────────────────────────────────────────────────
+let onnxSession = null;
+let labelMap    = {};
+
+async function runOnnx(normalized) {
+  if (inferInFlight) return;
+  inferInFlight = true;
+  try {
+    const flat = new Float32Array(63);
+    normalized.forEach(({ x, y, z }, i) => {
+      flat[i*3] = x; flat[i*3+1] = y; flat[i*3+2] = z;
+    });
+    const tensor = new ort.Tensor("float32", flat, [1, 63]);
+    const out    = await onnxSession.run({ float_input: tensor });
+    const idx    = Number(out["label"].data[0]);
+    const proba  = out["probabilities"].data;
+    updateSiteUI(idx, proba);
+  } catch (e) {
+    console.warn("ONNX error:", e);
+  } finally {
+    inferInFlight = false;
+  }
+}
+
+function updateSiteUI(idx, proba) {
+  const label = labelMap[idx] ?? "?";
+  const conf  = proba[idx];
+  const color = confColor(conf);
+  const pct   = (conf * 100).toFixed(1) + "%";
+  const cardClass = conf >= 0.80 ? "high" : conf >= 0.50 ? "medium" : "low";
+
+  document.getElementById("result-card").className = "result-card " + cardClass;
+
+  const sign = document.getElementById("site-sign");
+  sign.textContent = label;
+  sign.className = "hero-sign";
+  sign.style.color = color;
+
+  document.getElementById("site-fill").style.width = (conf * 100) + "%";
+  document.getElementById("site-fill").style.background = color;
+
+  const pill = document.getElementById("site-conf-pill");
+  pill.textContent = pct; pill.style.background = color + "22"; pill.style.color = color;
+
+  const pctEl = document.getElementById("site-pct");
+  pctEl.textContent = pct; pctEl.style.color = color;
+
+  const sorted = Array.from(proba)
+    .map((p, i) => [labelMap[i] ?? "?", p])
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3);
+  renderTop3(document.getElementById("site-top3"), sorted, "#a5b4fc");
+}
+
+function resetSiteUI() {
+  document.getElementById("result-card").className = "result-card";
+  const sign = document.getElementById("site-sign");
+  sign.textContent = "—"; sign.className = "hero-sign idle"; sign.style.color = "";
+  document.getElementById("site-fill").style.width = "0%";
+  document.getElementById("site-top3").innerHTML = "";
+  const pill = document.getElementById("site-conf-pill");
+  pill.textContent = "—"; pill.style.background = "var(--border)"; pill.style.color = "var(--muted)";
+  const pctEl = document.getElementById("site-pct");
+  pctEl.textContent = "—"; pctEl.style.color = "var(--muted)";
+}
+
+// ── Serve mode (/predict API) ─────────────────────────────────────────────────
+async function sendPredict(normalized) {
+  if (inferInFlight) return;
+  inferInFlight = true;
+  try {
+    const res = await fetch("/predict", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ landmarks: normalized }),
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.error) return;
+    updateCard("svm", data.svm);
+    updateCard("rf",  data.rf);
+    updateConsensus(data.svm, data.rf);
+  } catch { /* network hiccup — skip frame */ }
+  finally { inferInFlight = false; }
+}
+
+function updateCard(prefix, result) {
+  const { label, confidence, top3 } = result;
+  const accent     = prefix === "svm" ? "#6366f1" : "#22c55e";
+  const accentText = prefix === "svm" ? "#a5b4fc" : "#86efac";
+  const color = confColor(confidence);
+  const pct   = (confidence * 100).toFixed(1) + "%";
+
+  const sign = document.getElementById(`${prefix}-sign`);
+  sign.textContent = label; sign.className = "hero-sign";
+  sign.style.color = confidence >= 0.5 ? accentText : "var(--muted)";
+
+  document.getElementById(`${prefix}-fill`).style.width    = (confidence * 100) + "%";
+  document.getElementById(`${prefix}-fill`).style.background = accent;
+
+  const pill = document.getElementById(`${prefix}-conf-pill`);
+  pill.textContent = pct; pill.style.background = color + "22"; pill.style.color = color;
+
+  renderTop3(document.getElementById(`${prefix}-top3`), top3, accentText);
+}
+
+function updateConsensus(svm, rf) {
+  const box  = document.getElementById("consensus");
+  const sign = document.getElementById("consensus-sign");
+  const text = document.getElementById("consensus-text");
+  if (svm.label === rf.label) {
+    const avg = ((svm.confidence + rf.confidence) / 2 * 100).toFixed(1);
+    box.className = "consensus agree";
+    sign.textContent = svm.label; sign.className = "consensus-sign"; sign.style.color = "#22c55e";
+    text.textContent = `Both models agree · avg ${avg}%`;
+  } else {
+    box.className = "consensus disagree";
+    sign.textContent = `${svm.label} / ${rf.label}`; sign.className = "consensus-sign"; sign.style.color = "#f59e0b";
+    text.textContent = `Models disagree — SVM ${(svm.confidence*100).toFixed(1)}%  ·  RF ${(rf.confidence*100).toFixed(1)}%`;
+  }
+  document.getElementById("card-svm").classList.toggle("agree", svm.label === rf.label);
+  document.getElementById("card-rf").classList.toggle("agree",  svm.label === rf.label);
+}
+
+function resetServeUI() {
+  for (const prefix of ["svm", "rf"]) {
+    const sign = document.getElementById(`${prefix}-sign`);
+    sign.textContent = "—"; sign.className = "hero-sign idle"; sign.style.color = "";
+    document.getElementById(`${prefix}-fill`).style.width = "0%";
+    document.getElementById(`${prefix}-top3`).innerHTML = "";
+    const pill = document.getElementById(`${prefix}-conf-pill`);
+    pill.textContent = "—"; pill.style.background = "var(--border)"; pill.style.color = "var(--muted)";
+    document.getElementById(`card-${prefix}`).classList.remove("agree");
+  }
+  const box  = document.getElementById("consensus");
+  box.className = "consensus";
+  const csign = document.getElementById("consensus-sign");
+  csign.textContent = "—"; csign.className = "consensus-sign idle"; csign.style.color = "";
+  document.getElementById("consensus-text").textContent = "waiting for hand…";
+}
+
+// ── Detection loop ────────────────────────────────────────────────────────────
+function detectFrame() {
+  if (!landmarker || video.readyState < 2) { requestAnimationFrame(detectFrame); return; }
+  if (video.currentTime !== lastVideoTime) {
+    lastVideoTime = video.currentTime;
+    const results = landmarker.detectForVideo(video, video.currentTime * 1000);
+    const hasHand = !!results.landmarks?.length;
+    drawHand(results);
+    setStatus(hasHand ? "detecting" : "no_hand");
+    if (hasHand) {
+      const now = performance.now();
+      if (now - lastInferenceTs > INFER_INTERVAL) {
+        lastInferenceTs = now;
+        isSite ? runOnnx(normalizeHand(results.landmarks[0]))
+               : sendPredict(normalizeHand(results.landmarks[0]));
+      }
+    } else {
+      isSite ? resetSiteUI() : resetServeUI();
+    }
+    fpsFrames++;
+    const elapsed = performance.now() - fpsLastTs;
+    if (elapsed >= 1000) {
+      fpsBadge.textContent = `${Math.round(fpsFrames * 1000 / elapsed)} fps`;
+      fpsFrames = 0; fpsLastTs = performance.now();
+    }
+  }
+  requestAnimationFrame(detectFrame);
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init() {
+  try {
+    if (isSite) {
+      loadText.textContent = "Loading label map…";
+      const raw = await (await fetch("./label_map.json")).json();
+      labelMap = Object.fromEntries(Object.entries(raw).map(([k, v]) => [Number(k), v]));
+
+      loadText.textContent = "Loading ONNX model…";
+      ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/";
+      onnxSession = await ort.InferenceSession.create("./model.onnx", {
+        executionProviders: ["wasm"],
+      });
+    }
+
+    loadText.textContent = "Loading MediaPipe…";
+    const vision = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+    );
+    landmarker = await HandLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task",
+        delegate: "GPU",
+      },
+      runningMode: "VIDEO",
+      numHands: 1,
+    });
+
+    loadText.textContent = "Starting camera…";
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "user", width: 1280, height: 720 },
+    });
+    video.srcObject = stream;
+    await video.play();
+
+    overlay.style.display = "none";
+    setStatus("no_hand");
+    requestAnimationFrame(detectFrame);
+  } catch (err) {
+    overlay.style.display = "none";
+    errorBox.style.display = "";
+    errorBox.textContent = "Error: " + err.message;
+    setStatus("loading");
+  }
+}
+
+init();
+</script>
+</body>
+</html>
