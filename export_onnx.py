@@ -1,0 +1,69 @@
+"""
+Converts the trained SVM + StandardScaler to a single ONNX file and
+writes the deployment artefacts to site/.
+
+Run once after training:
+  python export_onnx.py
+
+Outputs:
+  site/model.onnx       — SVM pipeline (scaler baked in), 4-5 MB
+  site/label_map.json   — { "0": "ا", ... } index → Arabic label
+
+The site/ folder is then deployable as-is to GitHub Pages, Vercel,
+Netlify, Cloudflare Pages — no server required.
+"""
+
+import json
+import shutil
+import numpy as np
+import joblib
+from pathlib import Path
+from sklearn.pipeline import Pipeline
+from skl2onnx import convert_sklearn
+from skl2onnx.common.data_types import FloatTensorType
+import onnxruntime as rt
+
+MODELS_DIR = Path("models")
+SITE_DIR   = Path("site")
+SITE_DIR.mkdir(exist_ok=True)
+
+# ── Load ───────────────────────────────────────────────────────────────────────
+svm    = joblib.load(MODELS_DIR / "svm.pkl")
+scaler = joblib.load(MODELS_DIR / "scaler.pkl")
+with open(MODELS_DIR / "label_map.json", encoding="utf-8") as f:
+    label_map = json.load(f)          # { "0": "ا", "1": "ب", … }
+
+# ── Convert ────────────────────────────────────────────────────────────────────
+pipe = Pipeline([("scaler", scaler), ("svm", svm)])
+onnx_bytes = convert_sklearn(
+    pipe,
+    initial_types=[("float_input", FloatTensorType([None, 63]))],
+    options={id(svm): {"zipmap": False}},
+).SerializeToString()
+
+onnx_path = SITE_DIR / "model.onnx"
+onnx_path.write_bytes(onnx_bytes)
+print(f"model.onnx  → {len(onnx_bytes)/1024:.1f} KB")
+
+# ── Copy label map ─────────────────────────────────────────────────────────────
+label_path = SITE_DIR / "label_map.json"
+shutil.copy(MODELS_DIR / "label_map.json", label_path)
+print(f"label_map.json → {len(label_map)} classes")
+
+# ── Verify round-trip ──────────────────────────────────────────────────────────
+sess = rt.InferenceSession(onnx_bytes)
+
+with open("dataset/ز-1.json", encoding="utf-8") as f:
+    sample = json.load(f)
+flat = np.array(
+    [[lm["x"], lm["y"], lm["z"]] for lm in sample["frames"][0]["landmarks"]],
+    dtype=np.float32,
+).reshape(1, -1)
+
+pred_label, proba = sess.run(None, {"float_input": flat})
+idx = int(pred_label[0])
+top3_idx = np.argsort(proba[0])[::-1][:3]
+print(f"\nSanity check on 'ز-1.json':")
+print(f"  Predicted: {label_map[str(idx)]}  ({proba[0][idx]*100:.1f}%)")
+print(f"  Top 3: {[(label_map[str(i)], f'{proba[0][i]*100:.1f}%') for i in top3_idx]}")
+print(f"\nDone. Deploy the site/ folder to GitHub Pages or any static host.")

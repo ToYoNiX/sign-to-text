@@ -1,0 +1,21 @@
+# ── Generated dataset ──────────────────────────────────────────────────────────
+# Rebuild with: python build_dataset.py
+dataset/
+
+# ── Trained model files ────────────────────────────────────────────────────────
+# rf.pkl is 370 MB — exceeds GitHub's 100 MB file limit.
+# svm.pkl and scaler.pkl can be regenerated with: python train.py
+models/
+
+# ── Python ─────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+.env
+
+# ── OS ─────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
