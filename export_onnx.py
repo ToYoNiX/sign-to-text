@@ -24,7 +24,7 @@ from skl2onnx.common.data_types import FloatTensorType
 import onnxruntime as rt
 
 MODELS_DIR = Path("models")
-SITE_DIR   = Path("site")
+SITE_DIR   = Path("docs")
 SITE_DIR.mkdir(exist_ok=True)
 
 # ── Load ───────────────────────────────────────────────────────────────────────
@@ -66,4 +66,4 @@ top3_idx = np.argsort(proba[0])[::-1][:3]
 print(f"\nSanity check on 'ز-1.json':")
 print(f"  Predicted: {label_map[str(idx)]}  ({proba[0][idx]*100:.1f}%)")
 print(f"  Top 3: {[(label_map[str(i)], f'{proba[0][i]*100:.1f}%') for i in top3_idx]}")
-print(f"\nDone. Deploy the site/ folder to GitHub Pages or any static host.")
+print(f"\nDone. Deploy the docs/ folder to GitHub Pages or any static host.")
