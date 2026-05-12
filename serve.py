@@ -4,18 +4,27 @@ ARSL Live Recognition — web server + prediction API
   python serve.py              # starts on http://localhost:8080
   python serve.py --port 9000
 
-Open http://localhost:8080 in a browser.
-The page opens your camera, runs MediaPipe in the browser, normalises the
-landmarks exactly as the capture tool did, and streams them to /predict
-which returns both SVM and Random Forest predictions in real time.
+Open http://localhost:8080 in a browser. Allow camera access. Show your hand.
+
+Endpoints:
+  GET  /                  browser UI (SVM + RF side-by-side, live camera)
+  POST /predict           HTTP — accepts 21 landmarks, returns {svm, rf} results
+  WS   /predict?token=…   WebSocket — same format, persistent connection for real-time use
+
+Auth:
+  On first run auth.json is generated next to this file and the token is printed.
+  The WebSocket endpoint requires ?token=<value> — HTTP POST is open (used by the UI).
+  Delete auth.json and restart to rotate the token.
 """
 
 import json
+import secrets
 import argparse
 import numpy as np
 import joblib
 from pathlib import Path
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
 import uvicorn
@@ -23,6 +32,21 @@ import uvicorn
 MODELS_DIR    = Path("models")
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 HTML_PATH     = TEMPLATES_DIR / "index.html"
+AUTH_FILE     = Path(__file__).parent / "auth.json"
+
+# ── Auth token ─────────────────────────────────────────────────────────────────
+if not AUTH_FILE.exists():
+    _token = secrets.token_urlsafe(32)
+    AUTH_FILE.write_text(json.dumps({"token": _token}, indent=2))
+    print("=" * 52)
+    print("  Auth token generated — auth.json")
+    print(f"  Token: {_token}")
+    print("  Delete auth.json to regenerate.")
+    print("=" * 52)
+else:
+    _token = json.loads(AUTH_FILE.read_text())["token"]
+
+TOKEN = _token
 
 # ── Load models once at startup ────────────────────────────────────────────────
 svm    = joblib.load(MODELS_DIR / "svm.pkl")
@@ -33,6 +57,13 @@ with open(MODELS_DIR / "label_map.json", encoding="utf-8") as _f:
 IDX_TO_LABEL: dict[int, str] = {int(k): v for k, v in _raw_map.items()}
 
 app = FastAPI(title="ARSL Live Recognition")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["*"],
+)
 
 
 # ── Prediction endpoint ────────────────────────────────────────────────────────
@@ -65,6 +96,44 @@ def predict(req: PredictRequest):
             "top3": [[IDX_TO_LABEL[int(i)], float(proba[i])] for i in top3_idx],
         }
     return out
+
+
+@app.websocket("/predict")
+async def predict_ws(ws: WebSocket, token: str = Query(default="")):
+    if token != TOKEN:
+        await ws.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+    await ws.accept()
+    try:
+        while True:
+            raw = await ws.receive_text()
+            try:
+                data = json.loads(raw)
+                landmarks = data.get("landmarks", [])
+                if len(landmarks) != 21:
+                    await ws.send_text(json.dumps(
+                        {"error": f"expected 21 landmarks, got {len(landmarks)}"}
+                    ))
+                    continue
+                flat = []
+                for lm in landmarks:
+                    flat.extend([lm["x"], lm["y"], lm["z"]])
+                X = np.array(flat, dtype=np.float32).reshape(1, -1)
+                X_scaled = scaler.transform(X)
+                out = {}
+                for name, model in [("svm", svm), ("rf", rf)]:
+                    proba = model.predict_proba(X_scaled)[0]
+                    top3_idx = np.argsort(proba)[::-1][:3]
+                    out[name] = {
+                        "label":      IDX_TO_LABEL[int(top3_idx[0])],
+                        "confidence": float(proba[top3_idx[0]]),
+                        "top3": [[IDX_TO_LABEL[int(i)], float(proba[i])] for i in top3_idx],
+                    }
+                await ws.send_text(json.dumps(out, ensure_ascii=False))
+            except (json.JSONDecodeError, KeyError) as e:
+                await ws.send_text(json.dumps({"error": str(e)}))
+    except WebSocketDisconnect:
+        pass
 
 
 # ── Static assets ─────────────────────────────────────────────────────────────

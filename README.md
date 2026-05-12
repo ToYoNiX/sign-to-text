@@ -36,8 +36,11 @@ build_dataset.py      quality filtering + mirroring pipeline
 train.py              augmentation + SVM/RF training
 export_onnx.py        export SVM to ONNX (writes model.onnx + label_map.json to root)
 build.py              assemble _site/ for GitHub Pages deployment
-serve.py              local dev server — SVM + RF, live camera, calls /predict
+serve.py              local dev server — serves UI + POST /predict + WS /predict (auth)
 predict.py            headless prediction API or interactive terminal
+requirements.txt      pip dependencies
+pyproject.toml        Poetry dependencies (package-mode = false)
+auth.json             generated on first run — gitignored, holds the API token
 .github/workflows/
   deploy.yml          GitHub Actions — runs build.py and deploys to Pages on push
 ```
@@ -47,14 +50,24 @@ predict.py            headless prediction API or interactive terminal
 ## Quickstart
 
 **Install dependencies**
+
+With pip:
 ```bash
-pip install fastapi uvicorn scikit-learn joblib numpy mediapipe skl2onnx onnxruntime seaborn matplotlib pydantic
+pip install -r requirements.txt
+```
+
+With Poetry:
+```bash
+poetry install
 ```
 
 **1. Build dataset** (filter raw captures, generate mirrors)
 ```bash
 python build_dataset.py          # keeps best 30 samples per sign
 python build_dataset.py --keep 50
+
+poetry run python build_dataset.py
+poetry run python build_dataset.py --keep 50
 ```
 
 **2. Train**
@@ -62,6 +75,10 @@ python build_dataset.py --keep 50
 python train.py                  # 15 augmented copies per sample (default)
 python train.py --augment 25
 python train.py --no-augment     # raw data only
+
+poetry run python train.py
+poetry run python train.py --augment 25
+poetry run python train.py --no-augment
 ```
 Outputs `models/svm.pkl`, `models/rf.pkl`, `models/scaler.pkl`, `models/label_map.json`.
 
@@ -69,8 +86,94 @@ Outputs `models/svm.pkl`, `models/rf.pkl`, `models/scaler.pkl`, `models/label_ma
 ```bash
 python serve.py                  # http://localhost:8080
 python serve.py --port 9000
+
+poetry run python serve.py
+poetry run python serve.py --port 9000
 ```
 Open the URL in a browser. Allow camera access. Show your hand.
+
+---
+
+## Prediction API
+
+`serve.py` exposes two transports on the same `/predict` route — HTTP for one-off requests, WebSocket for real-time streaming.
+
+**Start the server**
+```bash
+python serve.py          # http://localhost:8080
+python serve.py --port 9000
+
+poetry run python serve.py
+poetry run python serve.py --port 9000
+```
+
+**WebSocket — real-time streaming**
+
+Connect once and send one message per video frame. No per-frame HTTP handshake overhead.
+
+Requires a token (see Auth below):
+```
+ws://localhost:8080/predict?token=<your-token>
+```
+
+Send:
+```json
+{ "landmarks": [{"x": 0.0, "y": 0.0, "z": 0.0}, "... 21 points total"] }
+```
+
+Receive:
+```json
+{
+  "svm": { "label": "ح", "confidence": 0.97, "top3": [["ح", 0.97], ["خ", 0.02], ["ه", 0.01]] },
+  "rf":  { "label": "ح", "confidence": 0.94, "top3": [["ح", 0.94], ["خ", 0.05], ["ه", 0.01]] }
+}
+```
+
+If the token is missing or wrong the connection is closed immediately with code 1008.
+
+**HTTP — one-off requests**
+
+No token required (used by the browser UI).
+
+```bash
+curl -X POST http://localhost:8080/predict \
+  -H "Content-Type: application/json" \
+  -d '{"landmarks": [{"x":0,"y":0,"z":0}, ...]}'   # 21 points
+```
+
+Response shape is identical to the WebSocket response above.
+
+CORS is enabled for all origins.
+
+---
+
+## Auth
+
+On first run `serve.py` generates a random token and writes it to `auth.json` next to the script:
+
+```
+====================================================
+  Auth token generated — auth.json
+  Token: <your-token>
+  Delete auth.json to regenerate.
+====================================================
+```
+
+Subsequent runs load the token silently.
+
+**Get the token at any time**
+```bash
+cat auth.json
+# { "token": "abc123..." }
+
+# extract just the value
+python -c "import json; print(json.load(open('auth.json'))['token'])"
+poetry run python -c "import json; print(json.load(open('auth.json'))['token'])"
+```
+
+**Rotate the token** — delete `auth.json` and restart the server. A new token will be generated and printed.
+
+`auth.json` is gitignored and never committed.
 
 ---
 
@@ -82,6 +185,9 @@ Open the URL in a browser. Allow camera access. Show your hand.
 ```bash
 python predict.py                          # http://localhost:8000
 python predict.py --port 9000 --model rf
+
+poetry run python predict.py
+poetry run python predict.py --port 9000 --model rf
 
 # POST /predict
 curl -X POST http://localhost:8000/predict \
@@ -96,6 +202,9 @@ curl http://localhost:8000/health
 ```bash
 python predict.py -i             # paste landmark JSON, press Enter
 python predict.py -i --model rf
+
+poetry run python predict.py -i
+poetry run python predict.py -i --model rf
 ```
 
 ---
@@ -122,6 +231,9 @@ Go to **Actions** tab in your repo. You'll see a *Deploy to GitHub Pages* workfl
 
 ```bash
 python train.py 2>&1 | grep -E "CV accuracy|Saved|Training|Loading" && python export_onnx.py
+# or
+poetry run python train.py 2>&1 | grep -E "CV accuracy|Saved|Training|Loading" && poetry run python export_onnx.py
+
 git add model.onnx label_map.json
 git commit -m "update model"
 git push                                 # Actions picks it up and redeploys
@@ -131,6 +243,8 @@ git push                                 # Actions picks it up and redeploys
 
 ```bash
 python build.py          # assembles _site/
+poetry run python build.py
+
 # open _site/index.html in a browser — this is exactly what gets deployed
 ```
 
