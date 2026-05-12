@@ -1,10 +1,10 @@
 """
 ARSL Live Recognition — web server + prediction API
 
-  python serve.py              # starts on http://localhost:8080
-  python serve.py --port 9000
+  python serve.py              # starts on http://localhost:9000
+  python serve.py --port 8080
 
-Open http://localhost:8080 in a browser. Allow camera access. Show your hand.
+Open http://localhost:9000 in a browser. Allow camera access. Show your hand.
 
 Endpoints:
   GET  /                  browser UI (SVM + RF side-by-side, live camera)
@@ -167,7 +167,7 @@ def index():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--port", type=int, default=8080)
+    parser.add_argument("--port", type=int, default=9000)
     args = parser.parse_args()
     print(f"Open http://localhost:{args.port} in your browser")
     uvicorn.run(app, host="0.0.0.0", port=args.port)

@@ -89,7 +89,7 @@ Outputs `models/svm.pkl`, `models/rf.pkl`, `models/scaler.pkl`, `models/label_ma
 
 **3. Run the live demo**
 ```bash
-python serve.py                  # http://localhost:8080
+python serve.py                  # http://localhost:9000
 python serve.py --port 9000
 
 poetry run python serve.py
@@ -105,7 +105,7 @@ Open the URL in a browser. Allow camera access. Show your hand.
 
 **Start the server**
 ```bash
-python serve.py          # http://localhost:8080
+python serve.py          # http://localhost:9000
 python serve.py --port 9000
 
 poetry run python serve.py
@@ -118,7 +118,7 @@ Connect once and send one message per video frame. No per-frame HTTP handshake o
 
 Requires a token (see Auth below):
 ```
-ws://localhost:8080/predict?token=<your-token>
+ws://localhost:9000/predict?token=<your-token>
 ```
 
 Send:
@@ -141,7 +141,7 @@ If the token is missing or wrong the connection is closed immediately with code 
 No token required (used by the browser UI).
 
 ```bash
-curl -X POST http://localhost:8080/predict \
+curl -X POST http://localhost:9000/predict \
   -H "Content-Type: application/json" \
   -d '{"landmarks": [{"x":0,"y":0,"z":0}, ...]}'   # 21 points
 ```
