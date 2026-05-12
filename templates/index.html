@@ -27,10 +27,18 @@
 
 <div class="error-box" id="error-box"></div>
 
+<div class="mode-tabs">
+  <button class="mode-tab active" data-tab="camera">Camera</button>
+  <button class="mode-tab" data-tab="upload">Upload Image</button>
+</div>
+
+<div id="pane-camera">
+
 <div class="video-wrap">
   <video id="video" playsinline muted></video>
   <canvas id="canvas"></canvas>
   <div class="fps-badge" id="fps-badge">— fps</div>
+  <button class="pause-btn" id="pause-btn" title="Pause detection">⏸</button>
 </div>
 
 <!-- site mode: single SVM card (ONNX inference) -->
@@ -99,6 +107,137 @@
   </div>
 </div>
 
+<!-- camera & pipeline info panel -->
+<div class="info-panel" id="info-panel">
+  <div class="info-header">Camera &amp; Pipeline</div>
+  <div class="info-grid">
+    <span class="info-key">Resolution</span><span class="info-val" id="inf-resolution">—</span>
+    <span class="info-key">Aspect ratio</span><span class="info-val" id="inf-aspect">—</span>
+    <span class="info-key">Device</span><span class="info-val" id="inf-device">—</span>
+    <span class="info-key">Camera FPS</span><span class="info-val" id="inf-camfps">—</span>
+    <span class="info-key">Aspect correction</span><span class="info-val">none · raw MediaPipe coords</span>
+    <span class="info-key">Normalization</span><span class="info-val">wrist → origin · scale by wrist→MCP9</span>
+    <span class="info-key">Hands tracked</span><span class="info-val">2</span>
+    <span class="info-key">Infer interval</span><span class="info-val" id="inf-interval">—</span>
+    <span class="info-key">Mode</span><span class="info-val" id="inf-mode">—</span>
+  </div>
+</div>
+
+<!-- normalized landmarks dump -->
+<div class="json-panel">
+  <div class="info-header">Last Normalized Landmarks (sent to classifier)</div>
+  <pre id="landmarks-json">waiting for hand…</pre>
+</div>
+
+</div><!-- /pane-camera -->
+
+<div id="pane-upload" style="display:none">
+
+<!-- upload image area -->
+<div class="upload-card">
+  <div class="info-header">Upload Image</div>
+  <label class="upload-area" id="upload-area">
+    <input type="file" id="upload-input" accept="image/*" hidden />
+    <div class="upload-placeholder" id="upload-placeholder">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/>
+        <line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+      <span>Drop an image or click to upload</span>
+    </div>
+    <div class="upload-wrap" id="upload-wrap" style="display:none">
+      <img id="upload-img" alt="" />
+      <canvas id="upload-canvas"></canvas>
+    </div>
+  </label>
+</div>
+
+<!-- site mode prediction (mirrors camera tab) -->
+<div id="up-m-site" style="display:none">
+  <div class="result-card" id="up-result-card">
+    <div class="card-header">
+      <span style="color:var(--indigo)">SVM Prediction</span>
+      <span class="conf-pill" id="up-site-conf-pill" style="background:var(--border);color:var(--muted)">—</span>
+    </div>
+    <div class="card-body">
+      <div class="hero-row">
+        <div class="hero-sign idle" id="up-site-sign">—</div>
+        <div class="hero-right">
+          <div class="hero-conf-label">Confidence</div>
+          <div class="hero-conf-track">
+            <div class="hero-conf-fill" id="up-site-fill" style="width:0%;background:var(--indigo)"></div>
+          </div>
+          <div class="hero-conf-label" id="up-site-pct" style="color:var(--muted)">—</div>
+        </div>
+      </div>
+      <div class="top3" id="up-site-top3"></div>
+    </div>
+  </div>
+</div>
+
+<!-- serve mode prediction (mirrors camera tab) -->
+<div id="up-m-serve" style="display:none">
+  <div class="cards">
+    <div class="model-card" id="up-card-svm">
+      <div class="card-header">
+        <span style="color:var(--indigo)">SVM</span>
+        <span class="conf-pill" id="up-svm-conf-pill" style="background:var(--border);color:var(--muted)">—</span>
+      </div>
+      <div class="card-body">
+        <div class="hero-sign idle" id="up-svm-sign">—</div>
+        <div style="width:100%">
+          <div class="hero-conf-track">
+            <div class="hero-conf-fill" id="up-svm-fill" style="width:0%;background:var(--indigo)"></div>
+          </div>
+        </div>
+        <div class="top3" id="up-svm-top3"></div>
+      </div>
+    </div>
+    <div class="model-card" id="up-card-rf">
+      <div class="card-header">
+        <span style="color:var(--green)">Random Forest</span>
+        <span class="conf-pill" id="up-rf-conf-pill" style="background:var(--border);color:var(--muted)">—</span>
+      </div>
+      <div class="card-body">
+        <div class="hero-sign idle" id="up-rf-sign">—</div>
+        <div style="width:100%">
+          <div class="hero-conf-track">
+            <div class="hero-conf-fill" id="up-rf-fill" style="width:0%;background:var(--green)"></div>
+          </div>
+        </div>
+        <div class="top3" id="up-rf-top3"></div>
+      </div>
+    </div>
+  </div>
+  <div class="consensus" id="up-consensus">
+    <span class="consensus-label">CONSENSUS</span>
+    <span class="consensus-sign idle" id="up-consensus-sign">—</span>
+    <span class="consensus-text" id="up-consensus-text">waiting for image…</span>
+  </div>
+</div>
+
+<!-- image & pipeline info (mirrors camera tab) -->
+<div class="info-panel" id="up-info-panel" style="display:none">
+  <div class="info-header">Image &amp; Pipeline</div>
+  <div class="info-grid">
+    <span class="info-key">Filename</span><span class="info-val" id="up-inf-filename">—</span>
+    <span class="info-key">Resolution</span><span class="info-val" id="up-inf-resolution">—</span>
+    <span class="info-key">Aspect ratio</span><span class="info-val" id="up-inf-aspect">—</span>
+    <span class="info-key">Hands detected</span><span class="info-val" id="up-inf-hands">—</span>
+    <span class="info-key">Aspect correction</span><span class="info-val">none · raw MediaPipe coords</span>
+    <span class="info-key">Normalization</span><span class="info-val">wrist → origin · scale by wrist→MCP9</span>
+  </div>
+</div>
+
+<!-- normalized landmarks (mirrors camera tab) -->
+<div class="json-panel" id="up-json-panel" style="display:none">
+  <div class="info-header">Normalized Landmarks (sent to classifier)</div>
+  <pre id="upload-json">—</pre>
+</div>
+
+</div><!-- /pane-upload -->
+
 <!-- onnxruntime-web: loaded as a global, only used in site mode -->
 <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
 <script>const CONFIG = %%CONFIG%%;</script>
@@ -123,7 +262,8 @@ const canvas     = document.getElementById("canvas");
 const ctx        = canvas.getContext("2d");
 const statusPill = document.getElementById("status-pill");
 const statusText = document.getElementById("status-text");
-const fpsBadge   = document.getElementById("fps-badge");
+const fpsBadge      = document.getElementById("fps-badge");
+const landmarksJson = document.getElementById("landmarks-json");
 
 const CONNECTIONS = [
   [0,1],[1,2],[2,3],[3,4],
@@ -139,6 +279,8 @@ let lastVideoTime   = -1;
 let lastInferenceTs = 0;
 let inferInFlight   = false;
 let fpsFrames = 0, fpsLastTs = performance.now();
+let cameraActive    = true;
+let cameraPaused    = false;
 const INFER_INTERVAL = isSite ? 80 : 150;
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
@@ -153,30 +295,32 @@ function normalizeHand(lm) {
   }));
 }
 
+function drawHandOnCtx(lm, drawCtx, w, h) {
+  drawCtx.strokeStyle = "rgba(99,102,241,0.85)";
+  drawCtx.lineWidth = 2.5;
+  for (const [a, b] of CONNECTIONS) {
+    drawCtx.beginPath();
+    drawCtx.moveTo(lm[a].x * w, lm[a].y * h);
+    drawCtx.lineTo(lm[b].x * w, lm[b].y * h);
+    drawCtx.stroke();
+  }
+  for (let i = 0; i < lm.length; i++) {
+    drawCtx.beginPath();
+    drawCtx.arc(lm[i].x * w, lm[i].y * h, i === 0 ? 7 : 4.5, 0, Math.PI * 2);
+    drawCtx.fillStyle = i === 0 ? "#f59e0b" : "#22c55e";
+    drawCtx.fill();
+    drawCtx.strokeStyle = "#fff";
+    drawCtx.lineWidth = 1.5;
+    drawCtx.stroke();
+  }
+}
+
 function drawHand(results) {
   canvas.width  = video.videoWidth;
   canvas.height = video.videoHeight;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   if (!results.landmarks?.length) return;
-  for (const lm of results.landmarks) {
-    ctx.strokeStyle = "rgba(99,102,241,0.85)";
-    ctx.lineWidth = 2.5;
-    for (const [a, b] of CONNECTIONS) {
-      ctx.beginPath();
-      ctx.moveTo(lm[a].x * canvas.width, lm[a].y * canvas.height);
-      ctx.lineTo(lm[b].x * canvas.width, lm[b].y * canvas.height);
-      ctx.stroke();
-    }
-    for (let i = 0; i < lm.length; i++) {
-      ctx.beginPath();
-      ctx.arc(lm[i].x * canvas.width, lm[i].y * canvas.height, i === 0 ? 7 : 4.5, 0, Math.PI * 2);
-      ctx.fillStyle = i === 0 ? "#f59e0b" : "#22c55e";
-      ctx.fill();
-      ctx.strokeStyle = "#fff";
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-    }
-  }
+  for (const lm of results.landmarks) drawHandOnCtx(lm, ctx, canvas.width, canvas.height);
 }
 
 function setStatus(state) {
@@ -352,6 +496,8 @@ function resetServeUI() {
 
 // ── Detection loop ────────────────────────────────────────────────────────────
 function detectFrame() {
+  if (!cameraActive) return;
+  if (cameraPaused) { requestAnimationFrame(detectFrame); return; }
   if (!landmarker || video.readyState < 2) { requestAnimationFrame(detectFrame); return; }
   if (video.currentTime !== lastVideoTime) {
     lastVideoTime = video.currentTime;
@@ -363,8 +509,9 @@ function detectFrame() {
       const now = performance.now();
       if (now - lastInferenceTs > INFER_INTERVAL) {
         lastInferenceTs = now;
-        isSite ? runOnnx(normalizeHand(results.landmarks[0]))
-               : sendPredict(normalizeHand(results.landmarks[0]));
+        const normalized = normalizeHand(results.landmarks[0]);
+        landmarksJson.textContent = JSON.stringify(normalized, null, 2);
+        isSite ? runOnnx(normalized) : sendPredict(normalized);
       }
     } else {
       isSite ? resetSiteUI() : resetServeUI();
@@ -415,6 +562,19 @@ async function init() {
     video.srcObject = stream;
     await video.play();
 
+    const track    = stream.getVideoTracks()[0];
+    const settings = track.getSettings();
+    const w = video.videoWidth  || settings.width  || 0;
+    const h = video.videoHeight || settings.height || 0;
+    function gcd(a, b) { return b ? gcd(b, a % b) : a; }
+    const g = gcd(w, h);
+    document.getElementById("inf-resolution").textContent = w && h ? `${w} × ${h}` : "—";
+    document.getElementById("inf-aspect").textContent     = w && h ? `${(w / h).toFixed(4)}  (${w/g}:${h/g})` : "—";
+    document.getElementById("inf-device").textContent     = track.label || "unknown";
+    document.getElementById("inf-camfps").textContent     = settings.frameRate ? `${Math.round(settings.frameRate)} fps` : "—";
+    document.getElementById("inf-interval").textContent   = `${INFER_INTERVAL} ms`;
+    document.getElementById("inf-mode").textContent       = isSite ? "ONNX · SVM" : "HTTP · SVM + RF";
+
     overlay.style.display = "none";
     setStatus("no_hand");
     requestAnimationFrame(detectFrame);
@@ -427,6 +587,193 @@ async function init() {
 }
 
 init();
+
+// ── Pause / resume ────────────────────────────────────────────────────────────
+const pauseBtn = document.getElementById("pause-btn");
+pauseBtn.addEventListener("click", () => {
+  cameraPaused = !cameraPaused;
+  pauseBtn.textContent = cameraPaused ? "▶" : "⏸";
+  pauseBtn.title = cameraPaused ? "Resume detection" : "Pause detection";
+  pauseBtn.classList.toggle("paused", cameraPaused);
+});
+
+// ── Mode tabs ─────────────────────────────────────────────────────────────────
+document.querySelectorAll(".mode-tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".mode-tab").forEach(t => t.classList.remove("active"));
+    tab.classList.add("active");
+    const pane = tab.dataset.tab;
+    document.getElementById("pane-camera").style.display = pane === "camera" ? "" : "none";
+    document.getElementById("pane-upload").style.display = pane === "upload" ? "" : "none";
+    if (pane === "camera" && !cameraActive) {
+      cameraActive = true;
+      requestAnimationFrame(detectFrame);
+    } else if (pane === "upload") {
+      cameraActive = false;
+    }
+  });
+});
+
+// ── Image upload ──────────────────────────────────────────────────────────────
+let imgLandmarker = null;
+
+async function ensureImageLandmarker() {
+  if (imgLandmarker) return imgLandmarker;
+  const vision = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+  );
+  imgLandmarker = await HandLandmarker.createFromOptions(vision, {
+    baseOptions: {
+      modelAssetPath:
+        "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task",
+      delegate: "GPU",
+    },
+    runningMode: "IMAGE",
+    numHands: 2,
+  });
+  return imgLandmarker;
+}
+
+const uploadArea        = document.getElementById("upload-area");
+const uploadInput       = document.getElementById("upload-input");
+const uploadPlaceholder = document.getElementById("upload-placeholder");
+const uploadWrap        = document.getElementById("upload-wrap");
+const uploadImg         = document.getElementById("upload-img");
+const uploadCanvas      = document.getElementById("upload-canvas");
+
+uploadInput.addEventListener("change", (e) => {
+  if (e.target.files[0]) processUploadedImage(e.target.files[0]);
+});
+uploadArea.addEventListener("dragover",  (e) => { e.preventDefault(); uploadArea.classList.add("drag-over"); });
+uploadArea.addEventListener("dragleave", ()  => uploadArea.classList.remove("drag-over"));
+uploadArea.addEventListener("drop", (e) => {
+  e.preventDefault();
+  uploadArea.classList.remove("drag-over");
+  const file = e.dataTransfer.files[0];
+  if (file?.type.startsWith("image/")) processUploadedImage(file);
+});
+
+function updateUploadCard(key, result) {
+  const { label, confidence, top3 } = result;
+  const accent     = key === "svm" ? "#6366f1" : "#22c55e";
+  const accentText = key === "svm" ? "#a5b4fc" : "#86efac";
+  const color = confColor(confidence);
+  const pct   = (confidence * 100).toFixed(1) + "%";
+  const sign  = document.getElementById(`up-${key}-sign`);
+  sign.textContent = label; sign.className = "hero-sign";
+  sign.style.color = confidence >= 0.5 ? accentText : "var(--muted)";
+  document.getElementById(`up-${key}-fill`).style.width      = (confidence * 100) + "%";
+  document.getElementById(`up-${key}-fill`).style.background = accent;
+  const pill = document.getElementById(`up-${key}-conf-pill`);
+  pill.textContent = pct; pill.style.background = color + "22"; pill.style.color = color;
+  renderTop3(document.getElementById(`up-${key}-top3`), top3, accentText);
+}
+
+function updateUploadConsensus(svm, rf) {
+  const box  = document.getElementById("up-consensus");
+  const sign = document.getElementById("up-consensus-sign");
+  const text = document.getElementById("up-consensus-text");
+  if (svm.label === rf.label) {
+    const avg = ((svm.confidence + rf.confidence) / 2 * 100).toFixed(1);
+    box.className = "consensus agree";
+    sign.textContent = svm.label; sign.className = "consensus-sign"; sign.style.color = "#22c55e";
+    text.textContent = `Both models agree · avg ${avg}%`;
+  } else {
+    box.className = "consensus disagree";
+    sign.textContent = `${svm.label} / ${rf.label}`; sign.className = "consensus-sign"; sign.style.color = "#f59e0b";
+    text.textContent = `Models disagree — SVM ${(svm.confidence*100).toFixed(1)}%  ·  RF ${(rf.confidence*100).toFixed(1)}%`;
+  }
+  document.getElementById("up-card-svm").classList.toggle("agree", svm.label === rf.label);
+  document.getElementById("up-card-rf").classList.toggle("agree",  svm.label === rf.label);
+}
+
+function updateUploadSiteUI(idx, proba) {
+  const label = labelMap[idx] ?? "?";
+  const conf  = proba[idx];
+  const color = confColor(conf);
+  const pct   = (conf * 100).toFixed(1) + "%";
+  document.getElementById("up-result-card").className =
+    "result-card " + (conf >= 0.80 ? "high" : conf >= 0.50 ? "medium" : "low");
+  const sign = document.getElementById("up-site-sign");
+  sign.textContent = label; sign.className = "hero-sign"; sign.style.color = color;
+  document.getElementById("up-site-fill").style.width      = (conf * 100) + "%";
+  document.getElementById("up-site-fill").style.background = color;
+  const pill = document.getElementById("up-site-conf-pill");
+  pill.textContent = pct; pill.style.background = color + "22"; pill.style.color = color;
+  const pctEl = document.getElementById("up-site-pct");
+  pctEl.textContent = pct; pctEl.style.color = color;
+  const sorted = Array.from(proba).map((p, i) => [labelMap[i] ?? "?", p]).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  renderTop3(document.getElementById("up-site-top3"), sorted, "#a5b4fc");
+}
+
+async function processUploadedImage(file) {
+  document.getElementById("up-m-site").style.display    = "none";
+  document.getElementById("up-m-serve").style.display   = "none";
+  document.getElementById("up-info-panel").style.display = "none";
+  document.getElementById("up-json-panel").style.display = "none";
+
+  const url = URL.createObjectURL(file);
+  await new Promise((resolve, reject) => { uploadImg.onload = resolve; uploadImg.onerror = reject; uploadImg.src = url; });
+  URL.revokeObjectURL(url);
+
+  uploadPlaceholder.style.display = "none";
+  uploadWrap.style.display = "";
+
+  const lm = await ensureImageLandmarker();
+  const results = lm.detect(uploadImg);
+
+  const w = uploadImg.naturalWidth, h = uploadImg.naturalHeight;
+  uploadCanvas.width = w; uploadCanvas.height = h;
+  const uctx = uploadCanvas.getContext("2d");
+  uctx.clearRect(0, 0, w, h);
+
+  function gcd(a, b) { return b ? gcd(b, a % b) : a; }
+  const g = gcd(w, h);
+  document.getElementById("up-inf-filename").textContent   = file.name;
+  document.getElementById("up-inf-resolution").textContent = `${w} × ${h}`;
+  document.getElementById("up-inf-aspect").textContent     = `${(w/h).toFixed(4)}  (${w/g}:${h/g})`;
+  document.getElementById("up-inf-hands").textContent      =
+    results.landmarks?.length ? `${results.landmarks.length} hand${results.landmarks.length > 1 ? "s" : ""}` : "none";
+  document.getElementById("up-info-panel").style.display = "";
+
+  if (!results.landmarks?.length) {
+    document.getElementById("upload-json").textContent     = "No hand detected in this image.";
+    document.getElementById("up-json-panel").style.display = "";
+    return;
+  }
+
+  for (const lmSet of results.landmarks) drawHandOnCtx(lmSet, uctx, w, h);
+
+  const normalized = normalizeHand(results.landmarks[0]);
+  document.getElementById("upload-json").textContent     = JSON.stringify(normalized, null, 2);
+  document.getElementById("up-json-panel").style.display = "";
+
+  if (isSite) {
+    document.getElementById("up-m-site").style.display = "";
+    try {
+      const flat = new Float32Array(63);
+      normalized.forEach(({ x, y, z }, i) => { flat[i*3] = x; flat[i*3+1] = y; flat[i*3+2] = z; });
+      const tensor = new ort.Tensor("float32", flat, [1, 63]);
+      const out    = await onnxSession.run({ float_input: tensor });
+      updateUploadSiteUI(Number(out["label"].data[0]), out["probabilities"].data);
+    } catch { /* silent */ }
+  } else {
+    document.getElementById("up-m-serve").style.display = "";
+    try {
+      const res  = await fetch("/predict", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ landmarks: normalized }),
+      });
+      const data = await res.json();
+      if (data.svm) {
+        updateUploadCard("svm", data.svm);
+        updateUploadCard("rf",  data.rf);
+        updateUploadConsensus(data.svm, data.rf);
+      }
+    } catch { /* silent */ }
+  }
+}
 </script>
 </body>
 </html>
