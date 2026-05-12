@@ -22,14 +22,15 @@ GitHub Actions runs this on every push that touches these files.
 import shutil
 from pathlib import Path
 
-ROOT      = Path(__file__).parent
-SITE      = ROOT / "_site"
+ROOT = Path(__file__).parent
+SITE = ROOT / "_site"
 TEMPLATES = ROOT / "templates"
 
-TEMPLATE  = TEMPLATES / "index.html"
-CSS       = TEMPLATES / "style.css"
-MODEL     = ROOT / "model.onnx"
-LABELMAP  = ROOT / "label_map.json"
+TEMPLATE = TEMPLATES / "index.html"
+CSS = TEMPLATES / "style.css"
+MODEL = ROOT / "model.onnx"
+LABELMAP = ROOT / "label_map.json"
+
 
 def build():
     for src in (TEMPLATE, CSS, MODEL, LABELMAP):
@@ -48,15 +49,16 @@ def build():
         html.replace("%%CONFIG%%", '{"mode":"site"}'),
         encoding="utf-8",
     )
-    shutil.copy(CSS,      SITE / "style.css")
-    shutil.copy(MODEL,    SITE / "model.onnx")
+    shutil.copy(CSS, SITE / "style.css")
+    shutil.copy(MODEL, SITE / "model.onnx")
     shutil.copy(LABELMAP, SITE / "label_map.json")
-    (SITE / ".nojekyll").touch()   # tell GitHub Pages to skip Jekyll processing
+    (SITE / ".nojekyll").touch()  # tell GitHub Pages to skip Jekyll processing
 
     print(f"Built → {SITE}/")
     for f in sorted(SITE.iterdir()):
         kb = f.stat().st_size / 1024
         print(f"  {f.name:<20} {kb:>7.1f} KB")
+
 
 if __name__ == "__main__":
     build()

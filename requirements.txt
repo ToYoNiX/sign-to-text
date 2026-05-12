@@ -7,3 +7,5 @@ skl2onnx
 onnxruntime
 matplotlib
 seaborn
+ruff
+pytest

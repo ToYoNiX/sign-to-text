@@ -6,7 +6,7 @@ on:
     paths:
       - model.onnx
       - label_map.json
-      - templates/site.html
+      - templates/index.html
       - build.py
 
 # Required for the deploy-pages action to push the site

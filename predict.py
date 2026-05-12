@@ -22,12 +22,13 @@ Usage:
   python predict.py --model rf    # use Random Forest (default: svm)
 """
 
+import argparse
 import json
 import sys
-import argparse
-import numpy as np
-import joblib
 from pathlib import Path
+
+import joblib
+import numpy as np
 
 MODELS_DIR = Path("models")
 
@@ -35,6 +36,7 @@ MODELS_DIR = Path("models")
 # ──────────────────────────────────────────────
 # Model loading
 # ──────────────────────────────────────────────
+
 
 def load_models():
     svm = joblib.load(MODELS_DIR / "svm.pkl")
@@ -50,6 +52,7 @@ def load_models():
 # ──────────────────────────────────────────────
 # Prediction logic
 # ──────────────────────────────────────────────
+
 
 def landmarks_to_features(landmarks: list[dict]) -> np.ndarray:
     """Convert a list of 21 {x, y, z} dicts to a (1, 63) feature array."""
@@ -83,6 +86,7 @@ def predict_landmarks(
 # Interactive terminal mode
 # ──────────────────────────────────────────────
 
+
 def run_interactive(model_name: str = "svm"):
     print(f"Loading models from {MODELS_DIR}/...")
     svm, rf, scaler, idx_to_label = load_models()
@@ -108,11 +112,13 @@ def run_interactive(model_name: str = "svm"):
         try:
             landmarks = json.loads(line)
             if not isinstance(landmarks, list) or len(landmarks) != 21:
-                print(f"  Error: expected a list of 21 points, got {len(landmarks) if isinstance(landmarks, list) else type(landmarks).__name__}")
+                got = len(landmarks) if isinstance(landmarks, list) else type(landmarks).__name__
+                print(f"  Error: expected a list of 21 points, got {got}")
                 continue
             result = predict_landmarks(landmarks, model, scaler, idx_to_label)
-            print(f"  → {result['label']}  ({result['confidence']*100:.1f}%)")
-            print(f"     Top 3: " + "  |  ".join(f"{l} {c*100:.1f}%" for l, c in result["top3"]))
+            print(f"  → {result['label']}  ({result['confidence'] * 100:.1f}%)")
+            top3_str = "  |  ".join(f"{lbl} {conf * 100:.1f}%" for lbl, conf in result["top3"])
+            print(f"     Top 3: {top3_str}")
         except json.JSONDecodeError as e:
             print(f"  JSON error: {e}")
         except Exception as e:
@@ -123,11 +129,12 @@ def run_interactive(model_name: str = "svm"):
 # FastAPI server mode
 # ──────────────────────────────────────────────
 
+
 def run_server(port: int = 8000, model_name: str = "svm"):
     try:
+        import uvicorn
         from fastapi import FastAPI, HTTPException
         from pydantic import BaseModel
-        import uvicorn
     except ImportError:
         print("Install FastAPI and uvicorn to run server mode:")
         print("  pip install fastapi uvicorn")
@@ -135,7 +142,6 @@ def run_server(port: int = 8000, model_name: str = "svm"):
 
     print(f"Loading models from {MODELS_DIR}/...")
     svm, rf, scaler, idx_to_label = load_models()
-    active_model = svm if model_name == "svm" else rf
 
     app = FastAPI(title="ARSL Prediction API", version="1.0")
 
@@ -172,10 +178,10 @@ def run_server(port: int = 8000, model_name: str = "svm"):
     print(f"Starting server on http://localhost:{port}")
     print(f"Active model: {model_name.upper()}")
     print(f"Classes: {len(idx_to_label)}")
-    print(f"\nExample request:")
-    print(f'  curl -X POST http://localhost:{port}/predict \\')
-    print(f'    -H "Content-Type: application/json" \\')
-    print(f'    -d \'{{"landmarks": [{{"x":0,"y":0,"z":0}}, ...21 points]}}\'\n')
+    print("\nExample request:")
+    print(f"  curl -X POST http://localhost:{port}/predict \\")
+    print('    -H "Content-Type: application/json" \\')
+    print('    -d \'{"landmarks": [{"x":0,"y":0,"z":0}, ...21 points]}\'\n')
 
     uvicorn.run(app, host="0.0.0.0", port=port)
 
@@ -186,12 +192,16 @@ def run_server(port: int = 8000, model_name: str = "svm"):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ARSL real-time prediction")
-    parser.add_argument("-i", "--interactive", action="store_true",
-                        help="Run interactive terminal mode instead of API server")
-    parser.add_argument("--port", type=int, default=8000,
-                        help="API server port (default 8000)")
-    parser.add_argument("--model", choices=["svm", "rf"], default="svm",
-                        help="Which model to use (default: svm)")
+    parser.add_argument(
+        "-i",
+        "--interactive",
+        action="store_true",
+        help="Run interactive terminal mode instead of API server",
+    )
+    parser.add_argument("--port", type=int, default=8000, help="API server port (default 8000)")
+    parser.add_argument(
+        "--model", choices=["svm", "rf"], default="svm", help="Which model to use (default: svm)"
+    )
     args = parser.parse_args()
 
     if args.interactive:

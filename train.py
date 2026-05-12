@@ -14,19 +14,19 @@ Usage:
   python train.py --no-augment   # train on raw dataset only
 """
 
-import json
 import argparse
-import os
+import json
 from pathlib import Path
 
-import numpy as np
-from sklearn.svm import SVC
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.model_selection import StratifiedKFold, cross_val_score
-from sklearn.metrics import classification_report, confusion_matrix
 import joblib
 import matplotlib
+import numpy as np
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.model_selection import StratifiedKFold, cross_val_score
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.svm import SVC
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -38,6 +38,7 @@ MODELS_DIR = Path("models")
 # ──────────────────────────────────────────────
 # Feature extraction
 # ──────────────────────────────────────────────
+
 
 def extract_features(d: dict) -> np.ndarray:
     """Flatten landmarks for all frames into a 1-D vector. (Static → 63 floats)"""
@@ -51,6 +52,7 @@ def extract_features(d: dict) -> np.ndarray:
 # ──────────────────────────────────────────────
 # Augmentation helpers
 # ──────────────────────────────────────────────
+
 
 def _reshape(x: np.ndarray) -> np.ndarray:
     """(63,) or (F*63,) → (F, 21, 3)"""
@@ -70,9 +72,9 @@ def add_noise(x: np.ndarray, scale: float = 0.012) -> np.ndarray:
 
 def rotate_3d(x: np.ndarray) -> np.ndarray:
     lm = _reshape(x.copy())
-    ax = np.radians(np.random.uniform(-20, 20))   # tilt toward/away camera
-    ay = np.radians(np.random.uniform(-20, 20))   # turn left/right
-    az = np.radians(np.random.uniform(-15, 15))   # in-plane twist
+    ax = np.radians(np.random.uniform(-20, 20))  # tilt toward/away camera
+    ay = np.radians(np.random.uniform(-20, 20))  # turn left/right
+    az = np.radians(np.random.uniform(-15, 15))  # in-plane twist
     # X rotation
     cy, sy = np.cos(ax), np.sin(ax)
     y_new = lm[:, :, 1] * cy - lm[:, :, 2] * sy
@@ -80,7 +82,7 @@ def rotate_3d(x: np.ndarray) -> np.ndarray:
     lm[:, :, 1], lm[:, :, 2] = y_new, z_new
     # Y rotation
     cy, sy = np.cos(ay), np.sin(ay)
-    x_new =  lm[:, :, 0] * cy + lm[:, :, 2] * sy
+    x_new = lm[:, :, 0] * cy + lm[:, :, 2] * sy
     z_new = -lm[:, :, 0] * sy + lm[:, :, 2] * cy
     lm[:, :, 0], lm[:, :, 2] = x_new, z_new
     # Z rotation
@@ -93,6 +95,7 @@ def rotate_3d(x: np.ndarray) -> np.ndarray:
 
 # Landmarks occluded when viewing from dorsal side (fingertips + DIP/IP joints)
 _DORSAL_OCCLUDED = [3, 4, 7, 8, 11, 12, 15, 16, 19, 20]
+
 
 def flip_depth(x: np.ndarray, occlusion_noise: float = 0.04) -> np.ndarray:
     """180° Y-axis rotation — simulates dorsal (back-of-hand) view.
@@ -109,12 +112,13 @@ def flip_depth(x: np.ndarray, occlusion_noise: float = 0.04) -> np.ndarray:
 
 # Finger chains: (root_landmark_index, [downstream_joint_indices])
 _FINGER_CHAINS = [
-    (0,  [1, 2, 3, 4]),    # thumb:  wrist → CMC → MCP → IP → Tip
-    (5,  [6, 7, 8]),        # index:  MCP → PIP → DIP → Tip
-    (9,  [10, 11, 12]),     # middle: MCP → PIP → DIP → Tip
-    (13, [14, 15, 16]),     # ring:   MCP → PIP → DIP → Tip
-    (17, [18, 19, 20]),     # pinky:  MCP → PIP → DIP → Tip
+    (0, [1, 2, 3, 4]),  # thumb:  wrist → CMC → MCP → IP → Tip
+    (5, [6, 7, 8]),  # index:  MCP → PIP → DIP → Tip
+    (9, [10, 11, 12]),  # middle: MCP → PIP → DIP → Tip
+    (13, [14, 15, 16]),  # ring:   MCP → PIP → DIP → Tip
+    (17, [18, 19, 20]),  # pinky:  MCP → PIP → DIP → Tip
 ]
+
 
 def scale_aug(x: np.ndarray) -> np.ndarray:
     lm = _reshape(x.copy())
@@ -148,6 +152,7 @@ def augment_sample(x: np.ndarray, n: int = 15) -> list[np.ndarray]:
 # Dataset loading
 # ──────────────────────────────────────────────
 
+
 def load_dataset(dataset_dir: Path) -> tuple[np.ndarray, list[str]]:
     X, y = [], []
     for f in sorted(dataset_dir.glob("*.json")):
@@ -161,6 +166,7 @@ def load_dataset(dataset_dir: Path) -> tuple[np.ndarray, list[str]]:
 # ──────────────────────────────────────────────
 # Confusion matrix plot
 # ──────────────────────────────────────────────
+
 
 def plot_confusion(y_true, y_pred, labels: list[str], path: Path):
     cm = confusion_matrix(y_true, y_pred, labels=labels)
@@ -187,6 +193,7 @@ def plot_confusion(y_true, y_pred, labels: list[str], path: Path):
 # ──────────────────────────────────────────────
 # Main
 # ──────────────────────────────────────────────
+
 
 def train(augment_copies: int = 15):
     MODELS_DIR.mkdir(exist_ok=True)
@@ -238,7 +245,10 @@ def train(augment_copies: int = 15):
 
     svm_cv = cross_val_score(
         SVC(kernel="rbf", C=10, gamma="scale", probability=True, random_state=42),
-        X_real_scaled, y_real_enc, cv=cv, scoring="accuracy"
+        X_real_scaled,
+        y_real_enc,
+        cv=cv,
+        scoring="accuracy",
     )
     print(f"  5-fold CV accuracy (real data): {svm_cv.mean():.3f} ± {svm_cv.std():.3f}")
     print(f"  Saved → {MODELS_DIR}/svm.pkl")
@@ -251,7 +261,10 @@ def train(augment_copies: int = 15):
 
     rf_cv = cross_val_score(
         RandomForestClassifier(n_estimators=300, random_state=42, n_jobs=-1),
-        X_real_scaled, y_real_enc, cv=cv, scoring="accuracy"
+        X_real_scaled,
+        y_real_enc,
+        cv=cv,
+        scoring="accuracy",
     )
     print(f"  5-fold CV accuracy (real data): {rf_cv.mean():.3f} ± {rf_cv.std():.3f}")
     print(f"  Saved → {MODELS_DIR}/rf.pkl")
@@ -276,10 +289,14 @@ def train(augment_copies: int = 15):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("--augment", type=int, default=15, metavar="N",
-                       help="Augmented copies per sample (default 15)")
-    group.add_argument("--no-augment", action="store_true",
-                       help="Skip augmentation")
+    group.add_argument(
+        "--augment",
+        type=int,
+        default=15,
+        metavar="N",
+        help="Augmented copies per sample (default 15)",
+    )
+    group.add_argument("--no-augment", action="store_true", help="Skip augmentation")
     args = parser.parse_args()
 
     copies = 0 if args.no_augment else args.augment

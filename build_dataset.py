@@ -18,15 +18,15 @@ Usage:
   python build_dataset.py --keep 0      # keep all (no filtering)
 """
 
-import json
-import copy
 import argparse
-import os
-from pathlib import Path
+import copy
+import json
 from collections import defaultdict
+from pathlib import Path
 
-import numpy as np
 import matplotlib
+import numpy as np
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
@@ -36,11 +36,26 @@ QUALITY_DIR = DATASET_DIR / "quality"
 
 LANDMARK_NAMES = [
     "Wrist",
-    "Thumb CMC", "Thumb MCP", "Thumb IP", "Thumb Tip",
-    "Index MCP", "Index PIP", "Index DIP", "Index Tip",
-    "Middle MCP", "Middle PIP", "Middle DIP", "Middle Tip",
-    "Ring MCP", "Ring PIP", "Ring DIP", "Ring Tip",
-    "Pinky MCP", "Pinky PIP", "Pinky DIP", "Pinky Tip",
+    "Thumb CMC",
+    "Thumb MCP",
+    "Thumb IP",
+    "Thumb Tip",
+    "Index MCP",
+    "Index PIP",
+    "Index DIP",
+    "Index Tip",
+    "Middle MCP",
+    "Middle PIP",
+    "Middle DIP",
+    "Middle Tip",
+    "Ring MCP",
+    "Ring PIP",
+    "Ring DIP",
+    "Ring Tip",
+    "Pinky MCP",
+    "Pinky PIP",
+    "Pinky DIP",
+    "Pinky Tip",
 ]
 
 
@@ -62,21 +77,22 @@ def mirror_sample(d: dict) -> dict:
     return m
 
 
-def save_heatmap(label: str, features: np.ndarray, selected_mask: np.ndarray, distances: np.ndarray):
+def save_heatmap(
+    label: str, features: np.ndarray, selected_mask: np.ndarray, distances: np.ndarray
+):
     """
     Saves a 2-panel heatmap:
       Left  — per-landmark std-dev (21 × 3) across ALL samples
       Right — per-landmark std-dev across SELECTED samples only
     """
-    n_frames = features.shape[1] // 63  # 63 = 21 × 3
     # Use only first frame for static; for dynamic use all frames flattened
     frame_feats = features[:, :63]  # (N, 63) — first frame landmarks
 
-    all_lm = frame_feats.reshape(-1, 21, 3)       # (N, 21, 3)
+    all_lm = frame_feats.reshape(-1, 21, 3)  # (N, 21, 3)
     sel_lm = frame_feats[selected_mask].reshape(-1, 21, 3)
 
-    all_std = all_lm.std(axis=0)   # (21, 3)
-    sel_std = sel_lm.std(axis=0)   # (21, 3)
+    all_std = all_lm.std(axis=0)  # (21, 3)
+    sel_std = sel_lm.std(axis=0)  # (21, 3)
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 9))
     coord_labels = ["X", "Y", "Z"]

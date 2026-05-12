@@ -40,9 +40,14 @@ serve.py              local dev server — serves UI + POST /predict + WS /predi
 predict.py            headless prediction API or interactive terminal
 requirements.txt      pip dependencies
 pyproject.toml        Poetry dependencies (package-mode = false)
+poetry.lock           locked dependency versions
 auth.json             generated on first run — gitignored, holds the API token
+tests/
+  test_predict.py     unit tests for the prediction pipeline
 .github/workflows/
-  deploy.yml          GitHub Actions — runs build.py and deploys to Pages on push
+  deploy.yml          on push to main — builds and deploys to GitHub Pages
+  lint.yml            on pull request — ruff check + format
+  test.yml            on push/PR — pytest
 ```
 
 ---
@@ -205,6 +210,26 @@ python predict.py -i --model rf
 
 poetry run python predict.py -i
 poetry run python predict.py -i --model rf
+```
+
+---
+
+## CI
+
+| Workflow | Trigger | What it does |
+|---|---|---|
+| `lint.yml` | Pull request | `ruff check` + `ruff format --check` |
+| `test.yml` | Push to main, pull request | `pytest tests/ -v` |
+| `deploy.yml` | Push to main (model/template changes) | Builds `_site/` and deploys to GitHub Pages |
+
+Run locally:
+```bash
+ruff check . && ruff format --check .
+pytest tests/ -v
+
+# or with Poetry
+poetry run ruff check . && poetry run ruff format --check .
+poetry run pytest tests/ -v
 ```
 
 ---
