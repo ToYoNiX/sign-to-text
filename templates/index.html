@@ -357,15 +357,37 @@ function renderTop3(container, items, accent) {
 let onnxSession = null;
 let labelMap    = {};
 
+// Mirrors features.py extract() — produces 86 floats from 21 normalized landmarks.
+// Layout: 63 raw coords | 15 direction floats (5 fingers × 3) | 5 curls | 3 palm normal
+function extractFeatures(normalized) {
+  const FINGERS = [[1,2,4],[5,6,8],[9,10,12],[13,14,16],[17,18,20]];
+  const raw = [];
+  for (const { x, y, z } of normalized) raw.push(x, y, z);
+  const dirs = [], curls = [];
+  for (const [mi, pi, ti] of FINGERS) {
+    const m = normalized[mi], p = normalized[pi], t = normalized[ti];
+    const dx = t.x-m.x, dy = t.y-m.y, dz = t.z-m.z;
+    const n = Math.sqrt(dx*dx+dy*dy+dz*dz);
+    n > 1e-6 ? dirs.push(dx/n, dy/n, dz/n) : dirs.push(0, 0, 0);
+    const v1x=m.x-p.x, v1y=m.y-p.y, v1z=m.z-p.z;
+    const v2x=t.x-p.x, v2y=t.y-p.y, v2z=t.z-p.z;
+    const n1=Math.sqrt(v1x*v1x+v1y*v1y+v1z*v1z), n2=Math.sqrt(v2x*v2x+v2y*v2y+v2z*v2z);
+    curls.push((n1>1e-6&&n2>1e-6) ? 1-Math.max(-1,Math.min(1,(v1x*v2x+v1y*v2y+v1z*v2z)/(n1*n2))) : 0);
+  }
+  const ix=normalized[5].x-normalized[0].x, iy=normalized[5].y-normalized[0].y, iz=normalized[5].z-normalized[0].z;
+  const px=normalized[17].x-normalized[0].x, py=normalized[17].y-normalized[0].y, pz=normalized[17].z-normalized[0].z;
+  const cx=iy*pz-iz*py, cy=iz*px-ix*pz, cz=ix*py-iy*px;
+  const cn=Math.sqrt(cx*cx+cy*cy+cz*cz);
+  const palm = cn>1e-6 ? [cx/cn,cy/cn,cz/cn] : [0,0,0];
+  return new Float32Array([...raw, ...dirs, ...curls, ...palm]);
+}
+
 async function runOnnx(normalized) {
   if (inferInFlight) return;
   inferInFlight = true;
   try {
-    const flat = new Float32Array(63);
-    normalized.forEach(({ x, y, z }, i) => {
-      flat[i*3] = x; flat[i*3+1] = y; flat[i*3+2] = z;
-    });
-    const tensor = new ort.Tensor("float32", flat, [1, 63]);
+    const flat   = extractFeatures(normalized);
+    const tensor = new ort.Tensor("float32", flat, [1, 86]);
     const out    = await onnxSession.run({ float_input: tensor });
     const idx    = Number(out["label"].data[0]);
     const proba  = out["probabilities"].data;
@@ -751,9 +773,8 @@ async function processUploadedImage(file) {
   if (isSite) {
     document.getElementById("up-m-site").style.display = "";
     try {
-      const flat = new Float32Array(63);
-      normalized.forEach(({ x, y, z }, i) => { flat[i*3] = x; flat[i*3+1] = y; flat[i*3+2] = z; });
-      const tensor = new ort.Tensor("float32", flat, [1, 63]);
+      const flat   = extractFeatures(normalized);
+      const tensor = new ort.Tensor("float32", flat, [1, 86]);
       const out    = await onnxSession.run({ float_input: tensor });
       updateUploadSiteUI(Number(out["label"].data[0]), out["probabilities"].data);
     } catch { /* silent */ }

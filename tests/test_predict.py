@@ -1,6 +1,6 @@
 import numpy as np
 
-from predict import landmarks_to_features
+from features import N_FEATURES, extract
 
 
 def _make_landmarks(n=21):
@@ -8,23 +8,17 @@ def _make_landmarks(n=21):
 
 
 def test_output_shape():
-    result = landmarks_to_features(_make_landmarks())
-    assert result.shape == (1, 63)
+    result = extract(_make_landmarks())
+    assert result.shape == (N_FEATURES,)
 
 
 def test_output_dtype():
-    result = landmarks_to_features(_make_landmarks())
+    result = extract(_make_landmarks())
     assert result.dtype == np.float32
 
 
-def test_values_flattened_correctly():
+def test_raw_coords_in_first_63():
     lms = [{"x": 1.0, "y": 2.0, "z": 3.0}] * 21
-    result = landmarks_to_features(lms)
-    expected = np.array([1.0, 2.0, 3.0] * 21, dtype=np.float32).reshape(1, -1)
-    np.testing.assert_array_equal(result, expected)
-
-
-def test_partial_landmarks_produce_partial_shape():
-    # landmarks_to_features doesn't validate count — documents current behaviour
-    result = landmarks_to_features(_make_landmarks(n=5))
-    assert result.shape == (1, 15)
+    result = extract(lms)
+    expected_raw = np.array([1.0, 2.0, 3.0] * 21, dtype=np.float32)
+    np.testing.assert_array_equal(result[:63], expected_raw)

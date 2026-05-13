@@ -30,6 +30,8 @@ from pathlib import Path
 import joblib
 import numpy as np
 
+from features import extract
+
 MODELS_DIR = Path("models")
 
 
@@ -54,14 +56,6 @@ def load_models():
 # ──────────────────────────────────────────────
 
 
-def landmarks_to_features(landmarks: list[dict]) -> np.ndarray:
-    """Convert a list of 21 {x, y, z} dicts to a (1, 63) feature array."""
-    flat = []
-    for lm in landmarks:
-        flat.extend([lm["x"], lm["y"], lm["z"]])
-    return np.array(flat, dtype=np.float32).reshape(1, -1)
-
-
 def predict_landmarks(
     landmarks: list[dict],
     model,
@@ -69,7 +63,7 @@ def predict_landmarks(
     idx_to_label: dict,
     top_k: int = 3,
 ) -> dict:
-    X = landmarks_to_features(landmarks)
+    X = extract(landmarks).reshape(1, -1)
     X_scaled = scaler.transform(X)
 
     proba = model.predict_proba(X_scaled)[0]
