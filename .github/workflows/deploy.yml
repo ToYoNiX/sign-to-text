@@ -9,6 +9,9 @@ on:
       - templates/index.html
       - build.py
 
+  # Manual trigger from the GitHub Actions UI
+  workflow_dispatch:
+
 # Required for the deploy-pages action to push the site
 permissions:
   contents: read
@@ -26,6 +29,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
