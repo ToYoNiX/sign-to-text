@@ -34,6 +34,7 @@ model.onnx            exported SVM pipeline — committed, used by the static si
 label_map.json        index → Arabic label — committed alongside model.onnx
 build_dataset.py      quality filtering + mirroring pipeline
 train.py              augmentation + SVM/RF training
+analyze.py            class-correlation analysis — normalized confusion matrices + top confused pairs
 export_onnx.py        export SVM to ONNX (writes model.onnx + label_map.json to root)
 build.py              assemble _site/ for GitHub Pages deployment
 serve.py              local dev server — serves UI + POST /predict + WS /predict (auth)
@@ -87,7 +88,25 @@ poetry run python train.py --no-augment
 ```
 Outputs `models/svm.pkl`, `models/rf.pkl`, `models/scaler.pkl`, `models/label_map.json`.
 
-**3. Run the live demo**
+**3. Analyze class correlations** (optional — run after training)
+```bash
+python analyze.py                # default: top-10 confused pairs
+python analyze.py --top 15
+
+poetry run python analyze.py
+poetry run python analyze.py --top 15
+```
+Outputs three plots to `models/`:
+
+| File | What it shows |
+|---|---|
+| `svm_correlation.png` | SVM row-normalised confusion (recall %) |
+| `rf_correlation.png` | Random Forest row-normalised confusion (recall %) |
+| `comparison.png` | Both models side-by-side |
+
+Also prints the most commonly confused class pairs to stdout.
+
+**4. Run the live demo**
 ```bash
 python serve.py                  # http://localhost:9000
 python serve.py --port 9000
@@ -304,7 +323,7 @@ Landmarks are already normalized at capture time (wrist at origin, scaled by pal
 
 ## Augmentation
 
-`train.py` generates 15 augmented copies per real sample:
+`train.py` generates augmented copies per real sample (default 15, override with `--augment N`):
 
 | Transform | Probability | What it simulates |
 |---|---|---|
