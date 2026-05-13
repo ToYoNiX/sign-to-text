@@ -49,9 +49,7 @@ def fix(apply: bool = False):
 
         if label in DIRECTIONAL and current:
             action = "FIXING" if apply else "WOULD FIX"
-            print(
-                f"  {action:8s}  {path.name}  ({label})  mirrorable: true → false"
-            )
+            print(f"  {action:8s}  {path.name}  ({label})  mirrorable: true → false")
             if apply:
                 d["mirrorable"] = False
                 with open(path, "w", encoding="utf-8") as f:
