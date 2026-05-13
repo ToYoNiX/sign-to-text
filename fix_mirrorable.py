@@ -1,5 +1,5 @@
 """
-change mirro from false to true 
+change mirro from false to true
 """
 
 import json
@@ -10,11 +10,24 @@ RAW_DIR = Path("raw")
 
 
 DIRECTIONAL = {
-    #words
-    "واحد", "عشرة", "اثنان", "ثلاثة", "أربعة",
-    "خمسة", "ستة", "سبعة", "ثمانية", "تسعة",
-    #letters
-    "ر", "ز", "و", "ي", "ل", "ك",
+    # words
+    "واحد",
+    "عشرة",
+    "اثنان",
+    "ثلاثة",
+    "أربعة",
+    "خمسة",
+    "ستة",
+    "سبعة",
+    "ثمانية",
+    "تسعة",
+    # letters
+    "ر",
+    "ز",
+    "و",
+    "ي",
+    "ل",
+    "ك",
 }
 
 
@@ -35,7 +48,9 @@ def fix(apply: bool = False):
         current = d.get("mirrorable", True)
 
         if label in DIRECTIONAL and current:
-            print(f"  {'FIXING' if apply else 'WOULD FIX':8s}  {path.name}  ({label})  mirrorable: true → false")
+            print(
+                f"  {'FIXING' if apply else 'WOULD FIX':8s}  {path.name}  ({label})  mirrorable: true → false"
+            )
             if apply:
                 d["mirrorable"] = False
                 with open(path, "w", encoding="utf-8") as f:
@@ -55,7 +70,6 @@ def fix(apply: bool = False):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--apply", action="store_true",
-                        help="Write changes (default: dry run)")
+    parser.add_argument("--apply", action="store_true", help="Write changes (default: dry run)")
     args = parser.parse_args()
     fix(apply=args.apply)

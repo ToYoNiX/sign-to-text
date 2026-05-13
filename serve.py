@@ -16,6 +16,7 @@ Auth:
   The WebSocket endpoint requires ?token=<value> — HTTP POST is open (used by the UI).
   Delete auth.json and restart to rotate the token.
 """
+
 import argparse
 import json
 import secrets
@@ -29,12 +30,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel
 
-from features import extract   # ← single source of truth, 86 features
+from features import extract  # ← single source of truth, 86 features
 
-MODELS_DIR    = Path("models")
+MODELS_DIR = Path("models")
 TEMPLATES_DIR = Path(__file__).parent / "templates"
-HTML_PATH     = TEMPLATES_DIR / "index.html"
-AUTH_FILE     = Path(__file__).parent / "auth.json"
+HTML_PATH = TEMPLATES_DIR / "index.html"
+AUTH_FILE = Path(__file__).parent / "auth.json"
 
 # ── Auth token ─────────────────────────────────────────────────────────────────
 if not AUTH_FILE.exists():
@@ -51,15 +52,16 @@ else:
 TOKEN = _token
 
 # ── Load models ────────────────────────────────────────────────────────────────
-svm    = joblib.load(MODELS_DIR / "svm.pkl")
-rf = joblib.load(MODELS_DIR / "rf.pkl", mmap_mode='r')
+svm = joblib.load(MODELS_DIR / "svm.pkl")
+rf = joblib.load(MODELS_DIR / "rf.pkl", mmap_mode="r")
 scaler = joblib.load(MODELS_DIR / "scaler.pkl")
 with open(MODELS_DIR / "label_map.json", encoding="utf-8") as _f:
     IDX_TO_LABEL: dict[int, str] = {int(k): v for k, v in json.load(_f).items()}
 
 app = FastAPI(title="ARSL Live Recognition")
-app.add_middleware(CORSMiddleware, allow_origins=["*"],
-                   allow_methods=["GET", "POST"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST"], allow_headers=["*"]
+)
 
 
 # ── Shared prediction helper ───────────────────────────────────────────────────
@@ -68,27 +70,31 @@ def _predict(landmarks_raw: list[dict]) -> dict:
     landmarks_raw: list of 21 {x, y, z} dicts (already wrist-normalised by browser)
     Returns dict with 'svm' and 'rf' keys.
     """
-    feat    = extract(landmarks_raw)                      # (86,)
-    X       = feat.reshape(1, -1)
-    X_sc    = scaler.transform(X)
-    out     = {}
+    feat = extract(landmarks_raw)  # (86,)
+    X = feat.reshape(1, -1)
+    X_sc = scaler.transform(X)
+    out = {}
     for name, model in [("svm", svm), ("rf", rf)]:
-        proba    = model.predict_proba(X_sc)[0]
+        proba = model.predict_proba(X_sc)[0]
         top3_idx = np.argsort(proba)[::-1][:3]
         out[name] = {
-            "label":      IDX_TO_LABEL[int(top3_idx[0])],
+            "label": IDX_TO_LABEL[int(top3_idx[0])],
             "confidence": float(proba[top3_idx[0]]),
-            "top3":       [[IDX_TO_LABEL[int(i)], float(proba[i])] for i in top3_idx],
+            "top3": [[IDX_TO_LABEL[int(i)], float(proba[i])] for i in top3_idx],
         }
     return out
 
 
 # ── HTTP endpoint ──────────────────────────────────────────────────────────────
 class Landmark(BaseModel):
-    x: float; y: float; z: float
+    x: float
+    y: float
+    z: float
+
 
 class PredictRequest(BaseModel):
     landmarks: list[Landmark]
+
 
 @app.post("/predict")
 def predict_http(req: PredictRequest):
@@ -110,10 +116,11 @@ async def predict_ws(ws: WebSocket, token: str = Query(default="")):
             raw = await ws.receive_text()
             try:
                 data = json.loads(raw)
-                lms  = data.get("landmarks", [])
+                lms = data.get("landmarks", [])
                 if len(lms) != 21:
-                    await ws.send_text(json.dumps(
-                        {"error": f"expected 21 landmarks, got {len(lms)}"}))
+                    await ws.send_text(
+                        json.dumps({"error": f"expected 21 landmarks, got {len(lms)}"})
+                    )
                     continue
                 result = _predict(lms)
                 await ws.send_text(json.dumps(result, ensure_ascii=False))
@@ -128,13 +135,17 @@ async def predict_ws(ws: WebSocket, token: str = Query(default="")):
 def stylesheet():
     return FileResponse(TEMPLATES_DIR / "style.css", media_type="text/css")
 
+
 @app.get("/favicon.ico", include_in_schema=False)
 def favicon():
-    svg = ("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>"
-           "<rect width='32' height='32' rx='7' fill='%236366f1'/>"
-           "<text x='16' y='22' text-anchor='middle' font-size='16' "
-           "fill='white' font-family='system-ui'>AR</text></svg>")
+    svg = (
+        "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'>"
+        "<rect width='32' height='32' rx='7' fill='%236366f1'/>"
+        "<text x='16' y='22' text-anchor='middle' font-size='16' "
+        "fill='white' font-family='system-ui'>AR</text></svg>"
+    )
     return Response(content=svg, media_type="image/svg+xml")
+
 
 @app.get("/", response_class=HTMLResponse)
 def index():
