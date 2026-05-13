@@ -11,58 +11,66 @@ Outputs (repo root, committed):
 After exporting, run `python build.py` to assemble the static site,
 or just push — GitHub Actions will deploy automatically.
 """
-
 import json
 import shutil
-from pathlib import Path
-
-import joblib
 import numpy as np
-import onnxruntime as rt
+import joblib
+from pathlib import Path
+from sklearn.pipeline import Pipeline
 from skl2onnx import convert_sklearn
 from skl2onnx.common.data_types import FloatTensorType
-from sklearn.pipeline import Pipeline
+import onnxruntime as rt
+
+from features import extract_from_dict, N_FEATURES   
 
 MODELS_DIR = Path("models")
-ROOT = Path(__file__).parent
+ROOT       = Path(__file__).parent
 
 # ── Load ───────────────────────────────────────────────────────────────────────
-svm = joblib.load(MODELS_DIR / "svm.pkl")
+svm    = joblib.load(MODELS_DIR / "svm.pkl")
 scaler = joblib.load(MODELS_DIR / "scaler.pkl")
 with open(MODELS_DIR / "label_map.json", encoding="utf-8") as f:
-    label_map = json.load(f)  # { "0": "ا", "1": "ب", … }
+    label_map = json.load(f)
 
 # ── Convert ────────────────────────────────────────────────────────────────────
 pipe = Pipeline([("scaler", scaler), ("svm", svm)])
 onnx_bytes = convert_sklearn(
     pipe,
-    initial_types=[("float_input", FloatTensorType([None, 63]))],
+    initial_types=[("float_input", FloatTensorType([None, N_FEATURES]))],
     options={id(svm): {"zipmap": False}},
 ).SerializeToString()
 
 onnx_path = ROOT / "model.onnx"
 onnx_path.write_bytes(onnx_bytes)
-print(f"model.onnx     → {len(onnx_bytes) / 1024:.1f} KB")
+print(f"model.onnx     → {len(onnx_bytes)/1024:.1f} KB  (input: {N_FEATURES} features)")
 
-# ── Copy label map ─────────────────────────────────────────────────────────────
 label_path = ROOT / "label_map.json"
 shutil.copy(MODELS_DIR / "label_map.json", label_path)
 print(f"label_map.json → {len(label_map)} classes")
 
-# ── Verify round-trip ──────────────────────────────────────────────────────────
+# ── Sanity check: round-trip with a real sample ────────────────────────────────
 sess = rt.InferenceSession(onnx_bytes)
 
-with open("dataset/ز-1.json", encoding="utf-8") as f:
-    sample = json.load(f)
-flat = np.array(
-    [[lm["x"], lm["y"], lm["z"]] for lm in sample["frames"][0]["landmarks"]],
-    dtype=np.float32,
-).reshape(1, -1)
+# Find any sample in dataset/ to test with
+dataset = Path("dataset")
+test_files = sorted(dataset.glob("*.json"))
+if not test_files:
+    print("\nNo dataset files found — skipping sanity check (run build_dataset.py first)")
+else:
+    test_path = test_files[0]
+    with open(test_path, encoding="utf-8") as f:
+        sample = json.load(f)
+    feat = extract_from_dict(sample).reshape(1, -1)   # (1, 86)
 
-pred_label, proba = sess.run(None, {"float_input": flat})
-idx = int(pred_label[0])
-top3_idx = np.argsort(proba[0])[::-1][:3]
-print("\nSanity check on 'ز-1.json':")
-print(f"  Predicted: {label_map[str(idx)]}  ({proba[0][idx] * 100:.1f}%)")
-print(f"  Top 3: {[(label_map[str(i)], f'{proba[0][i] * 100:.1f}%') for i in top3_idx]}")
-print("\nDone. Commit model.onnx + label_map.json, then push — Actions will deploy.")
+    pred_label, proba = sess.run(None, {"float_input": feat})
+    idx      = int(pred_label[0])
+    top3_idx = np.argsort(proba[0])[::-1][:3]
+    expected = sample["label"]
+    predicted = label_map[str(idx)]
+    ok = "✓" if predicted == expected else "✗ MISMATCH"
+    print(f"\nSanity check on '{test_path.name}':")
+    print(f"  Expected:  {expected}")
+    print(f"  Predicted: {predicted}  ({proba[0][idx]*100:.1f}%)  {ok}")
+    print(f"  Top 3: {[(label_map[str(i)], f'{proba[0][i]*100:.1f}%') for i in top3_idx]}")
+
+print(f"\nDone. ")
