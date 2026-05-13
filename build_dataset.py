@@ -18,14 +18,14 @@ Usage:
   python build_dataset.py --keep 0      # keep all (no filtering)
 """
 
-import json
-import copy
 import argparse
-from pathlib import Path
+import copy
+import json
 from collections import defaultdict
+from pathlib import Path
 
-import numpy as np
 import matplotlib
+import numpy as np
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt

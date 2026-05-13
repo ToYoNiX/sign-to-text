@@ -14,15 +14,16 @@ or just push — GitHub Actions will deploy automatically.
 
 import json
 import shutil
-import numpy as np
-import joblib
 from pathlib import Path
-from sklearn.pipeline import Pipeline
+
+import joblib
+import numpy as np
+import onnxruntime as rt
 from skl2onnx import convert_sklearn
 from skl2onnx.common.data_types import FloatTensorType
-import onnxruntime as rt
+from sklearn.pipeline import Pipeline
 
-from features import extract_from_dict, N_FEATURES
+from features import N_FEATURES, extract_from_dict
 
 MODELS_DIR = Path("models")
 ROOT = Path(__file__).parent
@@ -74,4 +75,4 @@ else:
     print(f"  Predicted: {predicted}  ({proba[0][idx] * 100:.1f}%)  {ok}")
     print(f"  Top 3: {[(label_map[str(i)], f'{proba[0][i] * 100:.1f}%') for i in top3_idx]}")
 
-print(f"\nDone. ")
+print("\nDone.")

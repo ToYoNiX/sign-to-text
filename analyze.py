@@ -23,6 +23,8 @@ import matplotlib
 import numpy as np
 from sklearn.metrics import confusion_matrix
 
+from features import extract_from_dict
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -32,11 +34,7 @@ DATASET_DIR = Path("dataset")
 
 
 def extract_features(d: dict) -> np.ndarray:
-    vecs = []
-    for frame in d["frames"]:
-        for lm in frame["landmarks"]:
-            vecs.extend([lm["x"], lm["y"], lm["z"]])
-    return np.array(vecs, dtype=np.float32)
+    return extract_from_dict(d)
 
 
 def load_dataset(dataset_dir: Path):

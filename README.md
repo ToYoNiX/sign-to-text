@@ -2,7 +2,7 @@
 
 Arabic Sign Language (ARSL) static sign recognition using MediaPipe hand landmarks and classical ML classifiers (SVM + Random Forest).
 
-MediaPipe runs entirely in the browser — only 63 normalized floats per frame are ever sent to the classifier, making the system lightweight, lighting-invariant, and background-invariant.
+MediaPipe runs in the browser — 21 landmarks are normalized client-side, and the classifier derives 86 features (raw 63 + engineered features) before prediction. This keeps the system lightweight, lighting-invariant, and background-invariant.
 
 ---
 
@@ -12,7 +12,8 @@ MediaPipe runs entirely in the browser — only 63 normalized floats per frame a
 Camera → MediaPipe Hands (browser, WebAssembly)
        → 21 landmarks × (x, y, z)
        → normalize (wrist origin, palm-size scale)
-       → SVM / Random Forest → Arabic letter
+  → feature extraction (86 floats)
+  → SVM / Random Forest → Arabic letter
 ```
 
 **Normalization** removes position and size variation before classification:
@@ -108,7 +109,7 @@ Also prints the most commonly confused class pairs to stdout.
 
 **4. Run the live demo**
 ```bash
-python serve.py                  # http://localhost:9000
+python serve.py                  # http://localhost:8080
 python serve.py --port 9000
 
 poetry run python serve.py
@@ -118,13 +119,49 @@ Open the URL in a browser. Allow camera access. Show your hand.
 
 ---
 
+## Recommended flow
+
+### A) Train / update the model
+1. Capture raw samples into raw/ (one JSON per capture).
+2. Build the curated dataset:
+  ```bash
+  python build_dataset.py --keep 30
+  ```
+3. Train models (with or without augmentation):
+  ```bash
+  python train.py                 # default augment (15x)
+  python train.py --augment 25    # custom augment
+  # or: python train.py --no-augment
+  ```
+4. Export the SVM to ONNX (for the static site):
+  ```bash
+  python export_onnx.py
+  ```
+5. Build the static site (optional; GitHub Actions does this on push):
+  ```bash
+  python build.py
+  ```
+
+### B) Run inference only
+- Local live demo (SVM + RF): train first to produce models/ then run:
+  ```bash
+  python serve.py
+  ```
+- Static offline demo (SVM only): ensure model.onnx + label_map.json exist, then:
+  ```bash
+  python build.py
+  # open _site/index.html
+  ```
+
+---
+
 ## Prediction API
 
 `serve.py` exposes two transports on the same `/predict` route — HTTP for one-off requests, WebSocket for real-time streaming.
 
 **Start the server**
 ```bash
-python serve.py          # http://localhost:9000
+python serve.py          # http://localhost:8080
 python serve.py --port 9000
 
 poetry run python serve.py
@@ -137,7 +174,7 @@ Connect once and send one message per video frame. No per-frame HTTP handshake o
 
 Requires a token (see Auth below):
 ```
-ws://localhost:9000/predict?token=<your-token>
+ws://localhost:8080/predict?token=<your-token>
 ```
 
 Send:
@@ -160,7 +197,7 @@ If the token is missing or wrong the connection is closed immediately with code 
 No token required (used by the browser UI).
 
 ```bash
-curl -X POST http://localhost:9000/predict \
+curl -X POST http://localhost:8080/predict \
   -H "Content-Type: application/json" \
   -d '{"landmarks": [{"x":0,"y":0,"z":0}, ...]}'   # 21 points
 ```

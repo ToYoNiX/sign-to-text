@@ -42,7 +42,7 @@ if not AUTH_FILE.exists():
     _token = secrets.token_urlsafe(32)
     AUTH_FILE.write_text(json.dumps({"token": _token}, indent=2))
     print("=" * 52)
-    print(f"  Auth token generated — auth.json")
+    print("  Auth token generated — auth.json")
     print(f"  Token: {_token}")
     print("  Delete auth.json to regenerate.")
     print("=" * 52)

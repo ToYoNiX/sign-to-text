@@ -2,8 +2,8 @@
 change mirro from false to true
 """
 
-import json
 import argparse
+import json
 from pathlib import Path
 
 RAW_DIR = Path("raw")
@@ -48,8 +48,9 @@ def fix(apply: bool = False):
         current = d.get("mirrorable", True)
 
         if label in DIRECTIONAL and current:
+            action = "FIXING" if apply else "WOULD FIX"
             print(
-                f"  {'FIXING' if apply else 'WOULD FIX':8s}  {path.name}  ({label})  mirrorable: true → false"
+                f"  {action:8s}  {path.name}  ({label})  mirrorable: true → false"
             )
             if apply:
                 d["mirrorable"] = False

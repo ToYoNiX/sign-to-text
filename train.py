@@ -14,22 +14,17 @@ Usage:
   python train.py --no-augment   # train on raw dataset only
 """
 
-import json
 import argparse
+import json
 from pathlib import Path
 
-import numpy as np
-from sklearn.svm import SVC
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.model_selection import StratifiedKFold, cross_val_score
-from sklearn.metrics import classification_report, confusion_matrix
 import joblib
-import matplotlib
-
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import seaborn as sns
+import numpy as np
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report
+from sklearn.model_selection import StratifiedKFold, cross_val_score
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.svm import SVC
 
 from features import extract_from_dict, recompute_from_raw63
 
@@ -129,28 +124,6 @@ def load_dataset(dataset_dir: Path):
     return np.array(X, dtype=np.float32), y
 
 
-def plot_confusion(y_true, y_pred, labels, path: Path):
-    cm = confusion_matrix(y_true, y_pred, labels=labels)
-    fig, ax = plt.subplots(figsize=(max(8, len(labels) * 0.6), max(7, len(labels) * 0.6)))
-    sns.heatmap(
-        cm,
-        annot=True,
-        fmt="d",
-        cmap="Blues",
-        xticklabels=labels,
-        yticklabels=labels,
-        ax=ax,
-        linewidths=0.3,
-    )
-    ax.set_xlabel("Predicted")
-    ax.set_ylabel("True")
-    ax.set_title(path.stem.upper() + " — Confusion Matrix")
-    plt.tight_layout()
-    plt.savefig(path, dpi=120, bbox_inches="tight")
-    plt.close(fig)
-    print(f"  Confusion matrix → {path}")
-
-
 def train(augment_copies: int = 15):
     MODELS_DIR.mkdir(exist_ok=True)
 
@@ -222,18 +195,6 @@ def train(augment_copies: int = 15):
         y_pred = le.inverse_transform(model.predict(X_scaled))
         print(classification_report(y_train, y_pred, labels=classes_str, zero_division=0))
 
-    plot_confusion(
-        y_train,
-        le.inverse_transform(svm.predict(X_scaled)),
-        classes_str,
-        MODELS_DIR / "svm_confusion.png",
-    )
-    plot_confusion(
-        y_train,
-        le.inverse_transform(rf.predict(X_scaled)),
-        classes_str,
-        MODELS_DIR / "rf_confusion.png",
-    )
     print("\nAll done.")
 
 
