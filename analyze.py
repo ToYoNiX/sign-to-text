@@ -146,9 +146,9 @@ def main(dataset_dir: Path, top_n: int):
     X_scaled = scaler.transform(X)
 
     from sklearn.preprocessing import LabelEncoder
+
     le = LabelEncoder()
     le.fit(labels)
-    y_enc = le.transform(y_true)
 
     print("\nRunning predictions...")
     y_pred_svm = le.inverse_transform(svm.predict(X_scaled))
@@ -158,8 +158,15 @@ def main(dataset_dir: Path, top_n: int):
     cm_rf = norm_cm(y_true, y_pred_rf, labels)
 
     print("\nGenerating correlation plots...")
-    plot_correlation(cm_svm, labels, "SVM — Class Correlation (Recall %)", MODELS_DIR / "svm_correlation.png")
-    plot_correlation(cm_rf, labels, "Random Forest — Class Correlation (Recall %)", MODELS_DIR / "rf_correlation.png")
+    plot_correlation(
+        cm_svm, labels, "SVM — Class Correlation (Recall %)", MODELS_DIR / "svm_correlation.png"
+    )
+    plot_correlation(
+        cm_rf,
+        labels,
+        "Random Forest — Class Correlation (Recall %)",
+        MODELS_DIR / "rf_correlation.png",
+    )
     plot_comparison(cm_svm, cm_rf, labels, MODELS_DIR / "comparison.png")
 
     top_confusions(cm_svm, labels, n=top_n, model_name="SVM")
@@ -170,7 +177,13 @@ def main(dataset_dir: Path, top_n: int):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--top", type=int, default=10, metavar="N", help="Top-N confused pairs to print (default 10)")
+    parser.add_argument(
+        "--top",
+        type=int,
+        default=10,
+        metavar="N",
+        help="Top-N confused pairs to print (default 10)",
+    )
     parser.add_argument("--dataset-dir", type=Path, default=DATASET_DIR)
     args = parser.parse_args()
     main(args.dataset_dir, args.top)
